@@ -1,0 +1,1208 @@
+import React, { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase, Outlet, StockSheet } from './lib/supabase';
+import { 
+  LayoutDashboard, 
+  Store, 
+  BarChart2, 
+  FileText, 
+  Users, 
+  Search, 
+  Bell, 
+  Menu,
+  ChevronDown,
+  LogOut,
+  Package,
+  AlertTriangle,
+  AlertCircle,
+  Download,
+  Shield
+} from 'lucide-react';
+import { 
+  LineChart, 
+  Line, 
+  PieChart, 
+  Pie, 
+  BarChart,
+  Bar,
+  Cell, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip as RechartsTooltip, 
+  ResponsiveContainer, 
+  Legend 
+} from 'recharts';
+import { MapContainer, TileLayer, Marker, Tooltip as LeafletTooltip } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+const marketCoordinates: Record<string, [number, number]> = {
+  'Anuradapura': [8.3114, 80.4037],
+  'Colombo-15': [6.9603, 79.8739],
+  'Badulla': [6.9934, 81.0550],
+  'Galle': [6.0535, 80.2210],
+  'Batticaloa': [7.7170, 81.6998],
+  'Trincomalee': [8.5874, 81.2152],
+  'Beruwala': [6.4788, 79.9831],
+  'Chilaw': [7.5765, 79.7953],
+  'Colombo-05': [6.8845, 79.8687],
+  'Jaffna': [9.6615, 80.0255],
+  'Kandy': [7.2906, 80.6337],
+  'Kurunegala': [7.4833, 80.3667],
+  'LB Direct-Boralesgamuwa': [6.8415, 79.9016],
+  'LB Direct-Kandy': [7.2906, 80.6337],
+  'Negombo': [7.2008, 79.8737],
+  'NuwaraEliya': [6.9497, 80.7828],
+  'Rathnapura': [6.7056, 80.3847],
+  'Tangalle': [6.0240, 80.7941]
+};
+
+const redDotIcon = new L.DivIcon({
+  className: 'custom-icon',
+  html: `<div style="background-color: #ef4444; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);"></div>`,
+  iconSize: [12, 12],
+  iconAnchor: [6, 6]
+});
+
+export default function AdminDashboard() {
+  const navigate = useNavigate();
+  const [outlets, setOutlets] = useState<Outlet[]>([]);
+  const [stockEntries, setStockEntries] = useState<StockSheet[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState('Admin');
+
+  const [activeMenu, setActiveMenu] = useState('Dashboard');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [tableSearchQuery, setTableSearchQuery] = useState('');
+
+  // Filters for Outlets Manager
+  const [selectedMarket, setSelectedMarket] = useState('All');
+  const [selectedChannel, setSelectedChannel] = useState('All');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedMainBrand, setSelectedMainBrand] = useState('All');
+  const [selectedDateRange, setSelectedDateRange] = useState('All');
+  const [selectedTM, setSelectedTM] = useState('All');
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedTM, selectedMarket, selectedChannel, selectedCategory, selectedMainBrand, selectedDateRange, tableSearchQuery]);
+
+  // Reports State
+  const [reportStartDate, setReportStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split('T')[0];
+  });
+  const [reportEndDate, setReportEndDate] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
+  const [reportData, setReportData] = useState<StockSheet[]>([]);
+  const [reportLoading, setReportLoading] = useState(false);
+
+  // Presence State
+  const [onlineUsers, setOnlineUsers] = useState<Record<string, any>>({});
+  const [lastSeenUsers, setLastSeenUsers] = useState<Record<string, string>>({});
+
+  // Admin Control Center State
+  const [markets, setMarkets] = useState<string[]>(Object.keys(marketCoordinates));
+  const [systemUsers, setSystemUsers] = useState<any[]>(() => {
+    const saved = localStorage.getItem('systemUsers');
+    return saved ? JSON.parse(saved) : [
+      { id: '1', email: 'rumeshanjanard@gmail.com', name: 'Super Admin', role: 'Admin', market: 'All' },
+      { id: '2', email: 'crishmalf@lionbeer.com', name: 'Crishmalf', role: 'RSM', market: 'All' }
+    ];
+  });
+  const [marketMappings, setMarketMappings] = useState<Record<string, string>>(() => {
+    const saved = localStorage.getItem('marketMappings');
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [newUser, setNewUser] = useState({ email: '', name: '', role: 'TM', market: 'Colombo-15' });
+  const [masterData, setMasterData] = useState({ market: 'Colombo-15', category: 'Spirit', salesQty: '' });
+  const [masterDataEntries, setMasterDataEntries] = useState<any[]>(() => {
+    const saved = localStorage.getItem('masterDataEntries');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Save Admin Control Center State
+  useEffect(() => {
+    localStorage.setItem('systemUsers', JSON.stringify(systemUsers));
+  }, [systemUsers]);
+
+  useEffect(() => {
+    localStorage.setItem('marketMappings', JSON.stringify(marketMappings));
+  }, [marketMappings]);
+
+  useEffect(() => {
+    localStorage.setItem('masterDataEntries', JSON.stringify(masterDataEntries));
+  }, [masterDataEntries]);
+
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  // Fetch user name
+  useEffect(() => {
+    const userStr = localStorage.getItem('currentUser');
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        setCurrentUser(user);
+        const email = user.email || user.id || '';
+        if (email.includes('@')) {
+          const namePart = email.split('@')[0];
+          setUserName(namePart.charAt(0).toUpperCase() + namePart.slice(1));
+        } else {
+          setUserName(email);
+        }
+      } catch (e) {
+        if (userStr.includes('@')) {
+          const namePart = userStr.split('@')[0];
+          setUserName(namePart.charAt(0).toUpperCase() + namePart.slice(1));
+        } else {
+          setUserName(userStr);
+        }
+      }
+    }
+  }, []);
+
+  // Fetch data
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      const { data: outletsData } = await supabase.from('outlets').select('*');
+      if (outletsData) setOutlets(outletsData);
+
+      const { data: stockData } = await supabase.from('stock_entries').select('*').range(0, 10000);
+      if (stockData) setStockEntries(stockData);
+
+      setLoading(false);
+    };
+    fetchData();
+  }, []);
+
+  // Fetch Reports Data
+  useEffect(() => {
+    if (activeMenu !== 'Reports') return;
+    
+    const fetchReportData = async () => {
+      setReportLoading(true);
+      const startDateTime = `${reportStartDate}T00:00:00.000Z`;
+      const endDateTime = `${reportEndDate}T23:59:59.999Z`;
+
+      const { data } = await supabase
+        .from('stock_entries')
+        .select('*')
+        .gte('updated_at', startDateTime)
+        .lte('updated_at', endDateTime)
+        .order('updated_at', { ascending: false });
+
+      if (data) {
+        setReportData(data);
+      } else {
+        setReportData([]);
+      }
+      setReportLoading(false);
+    };
+
+    fetchReportData();
+  }, [activeMenu, reportStartDate, reportEndDate]);
+
+  // Presence Tracking
+  useEffect(() => {
+    const channel = supabase.channel('online-users');
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const newState = channel.presenceState();
+        const users: Record<string, any> = {};
+        for (const id in newState) {
+          if (newState[id].length > 0) {
+             const presence = newState[id][0] as any;
+             if (presence.user_email) {
+               users[presence.user_email] = presence;
+             }
+          }
+        }
+        setOnlineUsers(users);
+      })
+      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+        if (leftPresences.length > 0) {
+           const presence = leftPresences[0] as any;
+           if (presence.user_email) {
+             setLastSeenUsers(prev => ({
+               ...prev,
+               [presence.user_email]: new Date().toISOString()
+             }));
+           }
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const outletMap = useMemo(() => {
+    const map = new Map<string, Outlet>();
+    outlets.forEach(o => map.set(o.id, o));
+    return map;
+  }, [outlets]);
+
+  // Unique values for filters
+  const uniqueTMs = useMemo(() => ['All', ...Array.from(new Set(outlets.map(o => o.tm_name).filter(Boolean))).sort()], [outlets]);
+  const uniqueMarkets = useMemo(() => {
+    let filteredOutlets = outlets;
+    if (selectedTM !== 'All') {
+      filteredOutlets = outlets.filter(o => o.tm_name === selectedTM);
+    }
+    return ['All', ...Array.from(new Set(filteredOutlets.map(o => o.market).filter(Boolean))).sort()];
+  }, [outlets, selectedTM]);
+  const uniqueChannels = useMemo(() => ['All', ...Array.from(new Set(outlets.map(o => o.channel).filter(Boolean))).sort()], [outlets]);
+  const uniqueCategories = useMemo(() => ['All', ...Array.from(new Set(stockEntries.map(s => s.category).filter(Boolean))).sort()], [stockEntries]);
+  
+  const uniqueMainBrands = useMemo(() => {
+    let filteredEntries = stockEntries;
+    if (selectedCategory !== 'All') {
+      filteredEntries = stockEntries.filter(s => s.category === selectedCategory);
+    }
+    return ['All', ...Array.from(new Set(filteredEntries.map(s => s.main_brand).filter(Boolean))).sort()];
+  }, [stockEntries, selectedCategory]);
+
+  const isToday = (dateString: string) => {
+    if (!dateString) return false;
+    const today = new Date();
+    const date = new Date(dateString);
+    return date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear();
+  };
+
+  // Global search filtering for Dashboard
+  const filteredStockEntries = useMemo(() => {
+    return stockEntries.filter(s => {
+      const o = outletMap.get(s.outlet_id);
+      let matchSearch = true;
+      const query = searchQuery.toLowerCase() || tableSearchQuery.toLowerCase();
+      if (query.trim() !== '') {
+        const outletName = o?.outlet_name?.toLowerCase() || '';
+        const imCode = o?.im_code?.toLowerCase() || '';
+        matchSearch = outletName.includes(query) || imCode.includes(query);
+      }
+      return matchSearch;
+    });
+  }, [stockEntries, outletMap, searchQuery, tableSearchQuery]);
+
+  // Detailed filtering for Outlets Manager
+  const managerFilteredEntries = useMemo(() => {
+    return stockEntries.filter(s => {
+      const o = outletMap.get(s.outlet_id);
+      if (!o) return false;
+
+      const matchTM = selectedTM === 'All' || o.tm_name === selectedTM;
+      const matchMarket = selectedMarket === 'All' || o.market === selectedMarket;
+      const matchChannel = selectedChannel === 'All' || o.channel === selectedChannel;
+      const matchCategory = selectedCategory === 'All' || s.category === selectedCategory;
+      const matchMainBrand = selectedMainBrand === 'All' || s.main_brand === selectedMainBrand;
+      
+      let matchDate = true;
+      if (selectedDateRange !== 'All' && s.updated_at) {
+        const updatedDate = new Date(s.updated_at);
+        const today = new Date();
+        const diffTime = Math.abs(today.getTime() - updatedDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (selectedDateRange === 'Today') {
+          matchDate = isToday(s.updated_at);
+        } else if (selectedDateRange === 'This Week') {
+          matchDate = diffDays <= 7;
+        } else if (selectedDateRange === 'More than a week') {
+          matchDate = diffDays > 7;
+        }
+      }
+
+      let matchSearch = true;
+      const query = tableSearchQuery.toLowerCase() || searchQuery.toLowerCase();
+      if (query.trim() !== '') {
+        const outletName = o.outlet_name?.toLowerCase() || '';
+        const imCode = o.im_code?.toLowerCase() || '';
+        matchSearch = outletName.includes(query) || imCode.includes(query);
+      }
+
+      return matchTM && matchMarket && matchChannel && matchCategory && matchMainBrand && matchDate && matchSearch;
+    });
+  }, [stockEntries, outletMap, selectedTM, selectedMarket, selectedChannel, selectedCategory, selectedMainBrand, selectedDateRange, tableSearchQuery, searchQuery]);
+
+  // KPIs
+  const totalStockQty = filteredStockEntries.reduce((sum, entry) => sum + (entry.stock_count || 0), 0);
+  const lowStockCount = filteredStockEntries.filter(entry => entry.stock_count < 10 && entry.stock_count > 0).length;
+  const outOfStockCount = filteredStockEntries.filter(entry => entry.stock_count === 0).length;
+  
+  const activeTMsCount = useMemo(() => {
+    const todayEntries = filteredStockEntries.filter(s => isToday(s.updated_at));
+    const uniqueTMs = new Set();
+    todayEntries.forEach(s => {
+      const o = outletMap.get(s.outlet_id);
+      if (o?.tm_name) uniqueTMs.add(o.tm_name);
+    });
+    return uniqueTMs.size;
+  }, [filteredStockEntries, outletMap]);
+
+  // Charts Data
+  const trendData = useMemo(() => {
+    const last7Days = [...Array(7)].map((_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      return d.toISOString().split('T')[0];
+    }).reverse();
+
+    const dataMap: Record<string, number> = {};
+    last7Days.forEach(date => dataMap[date] = 0);
+
+    filteredStockEntries.forEach(entry => {
+      if (!entry.updated_at) return;
+      const date = entry.updated_at.split('T')[0];
+      if (dataMap[date] !== undefined) {
+        dataMap[date] += (entry.stock_count || 0);
+      }
+    });
+
+    return last7Days.map(date => ({
+      name: date.split('-').slice(1).join('/'),
+      stock: dataMap[date]
+    }));
+  }, [filteredStockEntries]);
+
+  const categoryChartData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    filteredStockEntries.forEach(entry => {
+      const cat = entry.category || 'Unknown';
+      counts[cat] = (counts[cat] || 0) + (entry.stock_count || 0);
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  }, [filteredStockEntries]);
+
+  const pieData = categoryChartData;
+
+  const marketChartData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    outlets.forEach(o => {
+      if (o.market) {
+        counts[o.market] = (counts[o.market] || 0) + 1;
+      }
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [outlets]);
+
+  const stockByMarketData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    filteredStockEntries.forEach(entry => {
+      const outlet = outletMap.get(entry.outlet_id);
+      if (outlet && outlet.market) {
+        counts[outlet.market] = (counts[outlet.market] || 0) + (entry.stock_count || 0);
+      }
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [filteredStockEntries, outletMap]);
+
+  const GREEN_COLORS = ['#22c55e', '#16a34a', '#15803d', '#166534', '#4ade80'];
+  const COLORS = ['#2b6bed', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+
+  const getStatusBadge = (stockCount: number) => {
+    if (stockCount === 0) {
+      return <div className="w-2.5 h-2.5 rounded-full bg-red-500 mx-auto" title="Critical"></div>;
+    } else if (stockCount <= 10) {
+      return <div className="w-2.5 h-2.5 rounded-full bg-amber-500 mx-auto" title="Low"></div>;
+    } else {
+      return <div className="w-2.5 h-2.5 rounded-full bg-green-500 mx-auto" title="Healthy"></div>;
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      const channel = supabase.channel('online-users');
+      await channel.untrack();
+      supabase.removeChannel(channel);
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error(e);
+    }
+    localStorage.removeItem('currentUser');
+    navigate('/');
+  };
+
+  const exportToCSV = () => {
+    const headers = ['IM Code', 'Outlet Name', 'TM Name', 'Market', 'Channel', 'Category', 'Main Brand', 'Sub Brand', 'Stock Count', 'Last Updated'];
+    const csvData = managerFilteredEntries.map(entry => {
+      const outlet = outletMap.get(entry.outlet_id);
+      return [
+        outlet?.im_code || '',
+        `"${outlet?.outlet_name || ''}"`,
+        `"${outlet?.tm_name || ''}"`,
+        outlet?.market || '',
+        outlet?.channel || '',
+        entry.category || '',
+        `"${entry.main_brand || ''}"`,
+        `"${entry.sub_brand || ''}"`,
+        entry.stock_count || 0,
+        entry.updated_at ? new Date(entry.updated_at).toLocaleString() : ''
+      ].join(',');
+    });
+    
+    const csvContent = [headers.join(','), ...csvData].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `outlet_stock_summary_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportReportToCSV = () => {
+    const headers = ['IM Code', 'Outlet Name', 'TM Name', 'Market', 'Category', 'Main Brand', 'Sub Brand', 'Previous Stock', 'Current Stock', 'Sales Qty', 'Updated At'];
+    const csvData = reportData.map(entry => {
+      const outlet = outletMap.get(entry.outlet_id);
+      return [
+        outlet?.im_code || '',
+        `"${outlet?.outlet_name || ''}"`,
+        `"${outlet?.tm_name || ''}"`,
+        outlet?.market || '',
+        entry.category || '',
+        `"${entry.main_brand || ''}"`,
+        `"${entry.sub_brand || ''}"`,
+        entry.previous_stock || 0,
+        entry.stock_count || 0,
+        entry.sales_qty || 0,
+        entry.updated_at ? new Date(entry.updated_at).toLocaleString() : ''
+      ].join(',');
+    });
+    
+    const csvContent = [headers.join(','), ...csvData].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    
+    // Format dates for filename
+    const startStr = new Date(reportStartDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit' }).replace(' ', '');
+    const endStr = new Date(reportEndDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit' }).replace(' ', '');
+    
+    link.setAttribute('download', `Sales_Report_${startStr}_to_${endStr}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Admin Control Center Handlers
+  const handleAddUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUser.email || !newUser.name) return;
+    
+    const user = {
+      id: Date.now().toString(),
+      ...newUser
+    };
+    
+    setSystemUsers([...systemUsers, user]);
+    if (newUser.role === 'TM' && newUser.market) {
+      setMarketMappings({ ...marketMappings, [newUser.market]: newUser.email });
+    }
+    
+    setNewUser({ email: '', name: '', role: 'TM', market: 'Colombo-15' });
+    alert('User added successfully!');
+  };
+
+  const handleUpdateMapping = (market: string, email: string) => {
+    setMarketMappings({ ...marketMappings, [market]: email });
+  };
+
+  const handleMasterDataSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!masterData.salesQty) return;
+    
+    const newEntry = {
+      id: Date.now().toString(),
+      market: masterData.market,
+      category: masterData.category,
+      salesQty: parseInt(masterData.salesQty),
+      date: new Date().toISOString()
+    };
+    
+    setMasterDataEntries([newEntry, ...masterDataEntries]);
+    setMasterData({ ...masterData, salesQty: '' });
+    alert(`Master data saved for ${masterData.market} - ${masterData.category}: ${masterData.salesQty}`);
+  };
+
+  const totalPages = Math.ceil(managerFilteredEntries.length / itemsPerPage);
+  const paginatedEntries = managerFilteredEntries.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  return (
+    <div className="flex h-screen bg-[#f0f3f6] font-sans overflow-hidden">
+      {/* Sidebar */}
+      <aside className="w-64 bg-[#f8f9fa] border-r border-slate-200 flex flex-col z-20 hidden md:flex text-[13px] text-slate-700">
+        {/* Logo */}
+        <div className="h-14 flex items-center px-4 mb-2">
+          <div className="w-7 h-7 bg-[#2b6bed] rounded flex items-center justify-center mr-3 shadow-sm">
+            <Package className="w-4 h-4 text-white" />
+          </div>
+          <div className="flex flex-col">
+            <span className="font-semibold text-slate-800 leading-tight">Stock</span>
+            <span className="text-xs text-slate-500 leading-tight">ERPNext</span>
+          </div>
+          <ChevronDown className="w-4 h-4 ml-auto text-slate-400" />
+        </div>
+        
+        {/* Search & Notification */}
+        <div className="px-4 mb-4 space-y-1">
+          <div className="flex items-center py-1.5 px-2 hover:bg-slate-100 rounded cursor-pointer text-slate-600">
+            <Bell className="w-4 h-4 mr-3 text-slate-400" />
+            <span>Notification</span>
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 overflow-y-auto px-2 custom-scrollbar">
+          <ul className="space-y-0.5">
+            <li>
+              <button 
+                onClick={() => setActiveMenu('Dashboard')}
+                className={`w-full flex items-center px-2 py-1.5 rounded ${activeMenu === 'Dashboard' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
+              >
+                <BarChart2 className={`w-4 h-4 mr-3 ${activeMenu === 'Dashboard' ? 'text-[#2b6bed]' : 'text-slate-400'}`} />
+                Dashboard
+              </button>
+            </li>
+            <li>
+              <button 
+                onClick={() => setActiveMenu('Outlets Manager')}
+                className={`w-full flex items-center px-2 py-1.5 rounded ${activeMenu === 'Outlets Manager' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
+              >
+                <Package className={`w-4 h-4 mr-3 ${activeMenu === 'Outlets Manager' ? 'text-[#2b6bed]' : 'text-slate-400'}`} />
+                Stock Entry
+              </button>
+            </li>
+            
+            <li className="pt-2">
+              <button 
+                onClick={() => setActiveMenu('Admin Control Center')}
+                className={`w-full flex items-center justify-between px-2 py-1.5 rounded ${activeMenu === 'Admin Control Center' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
+              >
+                <div className="flex items-center">
+                  <Shield className={`w-4 h-4 mr-3 ${activeMenu === 'Admin Control Center' ? 'text-[#2b6bed]' : 'text-slate-400'}`} />
+                  Setup
+                </div>
+                <ChevronDown className="w-3 h-3 text-slate-400" />
+              </button>
+            </li>
+            <li>
+              <button 
+                onClick={() => setActiveMenu('Reports')}
+                className={`w-full flex items-center justify-between px-2 py-1.5 rounded ${activeMenu === 'Reports' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
+              >
+                <div className="flex items-center">
+                  <FileText className={`w-4 h-4 mr-3 ${activeMenu === 'Reports' ? 'text-[#2b6bed]' : 'text-slate-400'}`} />
+                  Reports
+                </div>
+                <ChevronDown className="w-3 h-3 text-slate-400" />
+              </button>
+            </li>
+          </ul>
+        </nav>
+        
+        {/* User Profile */}
+        <div className="p-4 border-t border-slate-200 mt-auto">
+          <div className="flex items-center gap-3 cursor-pointer" onClick={handleLogout}>
+            <div className="w-8 h-8 rounded-full bg-[#e8f0fe] text-[#2b6bed] flex items-center justify-center font-medium text-xs">
+              {userName.substring(0, 2).toUpperCase()}
+            </div>
+            <div className="flex flex-col overflow-hidden">
+              <span className="text-sm font-medium text-slate-700 truncate">{userName}</span>
+              <span className="text-xs text-slate-500 truncate">{currentUser?.email}</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+        {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-[#f8f9fa]">
+        
+        {/* Scrollable Content */}
+        <main className="flex-1 overflow-y-auto">
+          
+          {activeMenu === 'Dashboard' && (
+            <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+              
+              {/* Breadcrumb */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center text-sm text-slate-500">
+                  <LayoutDashboard className="w-4 h-4 mr-2" />
+                  <span>/ Dashboard /</span>
+                  <span className="text-slate-900 font-medium ml-1">Stock</span>
+                </div>
+                <button className="p-1.5 rounded bg-slate-100 text-slate-500 hover:bg-slate-200">
+                  <span className="font-bold tracking-widest leading-none">...</span>
+                </button>
+              </div>
+
+              {/* Top Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="text-[13px] font-medium text-slate-600">Total Outlets</h3>
+                  </div>
+                  <div className="text-2xl font-semibold text-slate-800">{outlets.length}</div>
+                </div>
+                
+                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="text-[13px] font-medium text-slate-600">Total Markets</h3>
+                  </div>
+                  <div className="text-2xl font-semibold text-slate-800">{uniqueMarkets.filter(m => m !== 'All').length}</div>
+                </div>
+
+                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="text-[13px] font-medium text-slate-600">Available Stock</h3>
+                  </div>
+                  <div className="text-2xl font-semibold text-slate-800">{totalStockQty}</div>
+                </div>
+              </div>
+
+              {/* Charts */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                {/* Outlets by Market */}
+                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                  <div className="flex justify-between items-start mb-1">
+                    <div>
+                      <h3 className="text-[15px] font-medium text-slate-800">Outlets by Market</h3>
+                    </div>
+                  </div>
+                  <div className="h-[300px] mt-6">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={marketChartData} margin={{ top: 5, right: 10, bottom: 25, left: -20 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} dy={10} angle={-45} textAnchor="end" />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                        <RechartsTooltip 
+                          contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                          cursor={{ fill: '#f8fafc' }}
+                        />
+                        <Bar dataKey="value" fill="#2b6bed" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Stock by Market */}
+                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                  <div className="flex justify-between items-start mb-1">
+                    <div>
+                      <h3 className="text-[15px] font-medium text-slate-800">Stock by Market</h3>
+                    </div>
+                  </div>
+                  <div className="h-[300px] mt-6">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={stockByMarketData} margin={{ top: 5, right: 10, bottom: 25, left: -20 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} dy={10} angle={-45} textAnchor="end" />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                        <RechartsTooltip 
+                          contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                          cursor={{ fill: '#f8fafc' }}
+                        />
+                        <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeMenu === 'Outlets Manager' && (
+            <div className="flex flex-col h-full p-4 sm:p-6 lg:p-8">
+              <div className="flex justify-between items-center mb-6 shrink-0">
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-800">Outlets Manager</h2>
+                  <p className="text-sm text-slate-500">Manage and filter all outlet stock details</p>
+                </div>
+                <button 
+                  onClick={exportToCSV}
+                  className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm"
+                >
+                  <Download className="w-4 h-4" />
+                  Export CSV
+                </button>
+              </div>
+
+              {/* Filters */}
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4 shrink-0">
+                {/* Search */}
+                <div className="lg:col-span-2">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Search</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search className="h-4 w-4 text-slate-400" />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Outlet Name or IM Code..."
+                      value={tableSearchQuery}
+                      onChange={(e) => setTableSearchQuery(e.target.value)}
+                      className="block w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                {/* Category */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Category</label>
+                  <select value={selectedCategory} onChange={e => { setSelectedCategory(e.target.value); setSelectedMainBrand('All'); }} className="w-full p-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white">
+                    {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                {/* Main Brand */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Main Brand</label>
+                  <select value={selectedMainBrand} onChange={e => setSelectedMainBrand(e.target.value)} className="w-full p-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white">
+                    {uniqueMainBrands.map(b => <option key={b} value={b}>{b}</option>)}
+                  </select>
+                </div>
+                {/* TM Name */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">TM Name</label>
+                  <select value={selectedTM} onChange={e => { setSelectedTM(e.target.value); setSelectedMarket('All'); }} className="w-full p-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white">
+                    {uniqueTMs.map(tm => <option key={tm} value={tm}>{tm}</option>)}
+                  </select>
+                </div>
+                {/* Market */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Market</label>
+                  <select value={selectedMarket} onChange={e => setSelectedMarket(e.target.value)} className="w-full p-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white">
+                    {uniqueMarkets.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                {/* Last Updated */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Last Updated</label>
+                  <select value={selectedDateRange} onChange={e => setSelectedDateRange(e.target.value)} className="w-full p-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white">
+                    {['All', 'Today', 'This Week', 'More than a week'].map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col overflow-hidden relative">
+                <div className="overflow-auto flex-1">
+                  <table className="w-full text-left border-collapse whitespace-nowrap">
+                    <thead className="sticky top-0 z-20 bg-slate-50 shadow-sm">
+                      <tr>
+                        <th className="sticky left-0 z-30 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Name / IM Code</th>
+                        <th className="px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">TM Name</th>
+                        <th className="px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Market</th>
+                        <th className="px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Channel</th>
+                        <th className="px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Category</th>
+                        <th className="px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Main Brand</th>
+                        <th className="px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Sub Brand</th>
+                        <th className="px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider text-center border-b border-slate-200">Status</th>
+                        <th className="px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider text-right border-b border-slate-200">Stock</th>
+                        <th className="px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider text-right border-b border-slate-200">Updated</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {loading ? (
+                        <tr>
+                          <td colSpan={9} className="px-4 py-8 text-center text-slate-500">Loading data...</td>
+                        </tr>
+                      ) : managerFilteredEntries.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="px-4 py-8 text-center text-slate-500">No entries found matching your filters.</td>
+                        </tr>
+                      ) : (
+                        paginatedEntries.map((entry) => {
+                          const outlet = outletMap.get(entry.outlet_id);
+                          return (
+                            <tr key={entry.id} className="hover:bg-slate-50 transition-colors group">
+                              <td className="sticky left-0 z-10 bg-white group-hover:bg-slate-50 px-4 py-2 border-r border-slate-50 shadow-[1px_0_0_0_#f1f5f9]">
+                                <div className="font-medium text-slate-800 text-sm truncate max-w-[180px]" title={outlet?.outlet_name}>{outlet?.outlet_name || '-'}</div>
+                                <div className="text-[10px] text-slate-400 mt-0.5">{outlet?.im_code || '-'}</div>
+                              </td>
+                              <td className="px-4 py-2 text-xs text-slate-600">{outlet?.tm_name || '-'}</td>
+                              <td className="px-4 py-2 text-xs text-slate-600">{outlet?.market || '-'}</td>
+                              <td className="px-4 py-2 text-xs text-slate-600">{outlet?.channel || '-'}</td>
+                              <td className="px-4 py-2 text-xs text-slate-600">{entry.category || '-'}</td>
+                              <td className="px-4 py-2 text-xs text-slate-600 font-medium">{entry.main_brand || '-'}</td>
+                              <td className="px-4 py-2 text-xs text-slate-600 font-medium">{entry.sub_brand || '-'}</td>
+                              <td className="px-4 py-2 text-center">
+                                {getStatusBadge(entry.stock_count)}
+                              </td>
+                              <td className="px-4 py-2 text-xs font-bold text-slate-700 text-right">
+                                {entry.stock_count}
+                              </td>
+                              <td className="px-4 py-2 text-[10px] text-slate-500 text-right uppercase tracking-wider">
+                                {entry.updated_at ? new Date(entry.updated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {/* Pagination Controls */}
+                {managerFilteredEntries.length > 0 && (
+                  <div className="flex items-center justify-between p-3 border-t border-slate-200 bg-white shrink-0">
+                    <div className="text-xs text-slate-500">
+                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, managerFilteredEntries.length)} of {managerFilteredEntries.length} entries
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="px-3 py-1 border border-slate-200 rounded text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Prev
+                      </button>
+                      <span className="text-xs font-medium text-slate-600">
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <button 
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-1 border border-slate-200 rounded text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeMenu === 'Reports' && (
+            <div className="flex flex-col h-full overflow-hidden p-4 sm:p-6 lg:p-8">
+              <div className="flex justify-between items-center mb-4 shrink-0">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800">Reports</h2>
+                  <p className="text-xs text-slate-500">Generate and export sales and stock reports</p>
+                </div>
+                <button 
+                  onClick={exportReportToCSV}
+                  disabled={reportData.length === 0}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm ${reportData.length === 0 ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-green-500 hover:bg-green-600 text-white'}`}
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Export CSV
+                </button>
+              </div>
+
+              {/* Filters */}
+              <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 mb-4 flex flex-wrap items-end gap-4 shrink-0">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">From Date</label>
+                  <input 
+                    type="date" 
+                    value={reportStartDate}
+                    onChange={(e) => setReportStartDate(e.target.value)}
+                    className="p-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">To Date</label>
+                  <input 
+                    type="date" 
+                    value={reportEndDate}
+                    onChange={(e) => setReportEndDate(e.target.value)}
+                    className="p-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 shrink-0">
+                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                    <Package className="w-4 h-4 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Sales</p>
+                    <h4 className="text-lg font-black text-slate-800 leading-tight">
+                      {reportData.reduce((sum, entry) => sum + (entry.sales_qty || 0), 0)}
+                    </h4>
+                  </div>
+                </div>
+                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                    <Store className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Outlets Visited</p>
+                    <h4 className="text-lg font-black text-slate-800 leading-tight">
+                      {new Set(reportData.map(entry => entry.outlet_id)).size}
+                    </h4>
+                  </div>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="bg-white rounded-lg shadow-sm border border-slate-200 flex-1 flex flex-col min-h-0 relative">
+                <div className="overflow-auto flex-1">
+                  <table className="w-full text-left border-collapse whitespace-nowrap">
+                    <thead className="sticky top-0 z-10 bg-slate-50 shadow-sm">
+                      <tr>
+                        <th className="px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Name / IM Code</th>
+                        <th className="px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Category</th>
+                        <th className="px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Main Brand</th>
+                        <th className="px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Sub Brand</th>
+                        <th className="px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right border-b border-slate-200">Previous Stock</th>
+                        <th className="px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right border-b border-slate-200">Current Stock</th>
+                        <th className="px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right border-b border-slate-200">Sales Qty</th>
+                        <th className="px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right border-b border-slate-200">Updated</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {reportLoading ? (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-6 text-center text-slate-500 text-xs">Loading report data...</td>
+                        </tr>
+                      ) : reportData.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-8 text-center">
+                            <div className="flex flex-col items-center justify-center">
+                              <FileText className="w-8 h-8 text-slate-300 mb-2" />
+                              <p className="text-slate-500 font-medium text-xs">No records found for this period</p>
+                              <p className="text-[10px] text-slate-400 mt-1">Try selecting a different date range</p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        reportData.map((entry) => {
+                          const outlet = outletMap.get(entry.outlet_id);
+                          return (
+                            <tr key={entry.id} className="hover:bg-slate-50 transition-colors">
+                              <td className="px-4 py-2">
+                                <div className="font-medium text-slate-800 text-xs">{outlet?.outlet_name || '-'}</div>
+                                <div className="text-[10px] text-slate-400 mt-0.5">{outlet?.im_code || '-'}</div>
+                              </td>
+                              <td className="px-4 py-2 text-xs text-slate-600">{entry.category || '-'}</td>
+                              <td className="px-4 py-2 text-xs text-slate-600 font-medium">{entry.main_brand || '-'}</td>
+                              <td className="px-4 py-2 text-xs text-slate-600 font-medium">{entry.sub_brand || '-'}</td>
+                              <td className="px-4 py-2 text-xs font-bold text-slate-500 text-right">
+                                {entry.previous_stock || 0}
+                              </td>
+                              <td className="px-4 py-2 text-xs font-bold text-slate-700 text-right">
+                                {entry.stock_count}
+                              </td>
+                              <td className="px-4 py-2 text-xs font-bold text-green-600 text-right">
+                                {entry.sales_qty || 0}
+                              </td>
+                              <td className="px-4 py-2 text-[10px] text-slate-500 text-right uppercase tracking-wider">
+                                {entry.updated_at ? new Date(entry.updated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeMenu === 'Admin Control Center' && currentUser?.role === 'Admin' && (
+            <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
+              <div className="mb-8">
+                <h2 className="text-2xl font-black text-slate-800 tracking-tight">Admin Control Center</h2>
+                <p className="text-sm text-slate-500 mt-1">Manage users, market assignments, and master data.</p>
+              </div>
+
+              {/* System Overview Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex items-center">
+                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center mr-4">
+                    <Users className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Total System Users</p>
+                    <h3 className="text-2xl font-black text-slate-800">{systemUsers.length}</h3>
+                  </div>
+                </div>
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex items-center">
+                  <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center mr-4">
+                    <Store className="w-6 h-6 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Active Markets</p>
+                    <h3 className="text-2xl font-black text-slate-800">{markets.length}</h3>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* User Management Form */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                  <div className="p-6 border-b border-slate-100">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center">
+                      <Users className="w-5 h-5 mr-2 text-slate-400" />
+                      Add New User
+                    </h3>
+                  </div>
+                  <div className="p-6">
+                    <form onSubmit={handleAddUser} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Name</label>
+                        <input 
+                          type="text" 
+                          required
+                          value={newUser.name}
+                          onChange={e => setNewUser({...newUser, name: e.target.value})}
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                          placeholder="John Doe"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Email</label>
+                        <input 
+                          type="email" 
+                          required
+                          value={newUser.email}
+                          onChange={e => setNewUser({...newUser, email: e.target.value})}
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                          placeholder="john@example.com"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Role</label>
+                          <select 
+                            value={newUser.role}
+                            onChange={e => setNewUser({...newUser, role: e.target.value})}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                          >
+                            <option value="TM">TM</option>
+                            <option value="RSM">RSM</option>
+                            <option value="IT">IT</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Market</label>
+                          <select 
+                            value={newUser.market}
+                            onChange={e => setNewUser({...newUser, market: e.target.value})}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                          >
+                            {markets.map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <button type="submit" className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm transition-colors mt-2">
+                        Add User
+                      </button>
+                    </form>
+                  </div>
+                </div>
+
+                {/* Master Data Entry Form */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                  <div className="p-6 border-b border-slate-100">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center">
+                      <FileText className="w-5 h-5 mr-2 text-slate-400" />
+                      Master Data Entry (IT)
+                    </h3>
+                  </div>
+                  <div className="p-6">
+                    <form onSubmit={handleMasterDataSubmit} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Market</label>
+                        <select 
+                          value={masterData.market}
+                          onChange={e => setMasterData({...masterData, market: e.target.value})}
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        >
+                          {markets.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Category</label>
+                        <select 
+                          value={masterData.category}
+                          onChange={e => setMasterData({...masterData, category: e.target.value})}
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        >
+                          <option value="Spirit">Spirit</option>
+                          <option value="Wine">Wine</option>
+                          <option value="Beer">Beer</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Sales Quantity</label>
+                        <input 
+                          type="number" 
+                          required
+                          value={masterData.salesQty}
+                          onChange={e => setMasterData({...masterData, salesQty: e.target.value})}
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                          placeholder="Enter sales quantity"
+                        />
+                      </div>
+                      <button type="submit" className="w-full py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg text-sm transition-colors mt-2">
+                        Save Master Data
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+
+              {/* Market-TM Mapping */}
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mt-6">
+                <div className="p-6 border-b border-slate-100">
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center">
+                    <Store className="w-5 h-5 mr-2 text-slate-400" />
+                    Market-TM Mapping
+                  </h3>
+                </div>
+                <div className="p-0 overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100">
+                        <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Market</th>
+                        <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Assigned TM Email</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {markets.map(market => (
+                        <tr key={market} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-6 py-4 text-sm font-medium text-slate-800">{market}</td>
+                          <td className="px-6 py-4">
+                            <input 
+                              type="email"
+                              value={marketMappings[market] || ''}
+                              onChange={e => handleUpdateMapping(market, e.target.value)}
+                              placeholder="Assign TM Email"
+                              className="w-full max-w-xs px-3 py-1.5 bg-white border border-slate-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </main>
+      </div>
+    </div>
+  );
+}
