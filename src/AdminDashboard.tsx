@@ -15,8 +15,7 @@ import {
   Package,
   AlertTriangle,
   AlertCircle,
-  Download,
-  Shield
+  Download
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -589,19 +588,6 @@ export default function AdminDashboard() {
                 Stock Entry
               </button>
             </li>
-            
-            <li className="pt-2">
-              <button 
-                onClick={() => setActiveMenu('Admin Control Center')}
-                className={`w-full flex items-center justify-between px-2 py-1.5 rounded ${activeMenu === 'Admin Control Center' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
-              >
-                <div className="flex items-center">
-                  <Shield className={`w-4 h-4 mr-3 ${activeMenu === 'Admin Control Center' ? 'text-[#2b6bed]' : 'text-slate-400'}`} />
-                  Setup
-                </div>
-                <ChevronDown className="w-3 h-3 text-slate-400" />
-              </button>
-            </li>
             <li>
               <button 
                 onClick={() => setActiveMenu('Reports')}
@@ -1012,188 +998,6 @@ export default function AdminDashboard() {
                           );
                         })
                       )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeMenu === 'Admin Control Center' && currentUser?.role === 'Admin' && (
-            <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
-              <div className="mb-8">
-                <h2 className="text-2xl font-black text-slate-800 tracking-tight">Admin Control Center</h2>
-                <p className="text-sm text-slate-500 mt-1">Manage users, market assignments, and master data.</p>
-              </div>
-
-              {/* System Overview Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex items-center">
-                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center mr-4">
-                    <Users className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-500">Total System Users</p>
-                    <h3 className="text-2xl font-black text-slate-800">{systemUsers.length}</h3>
-                  </div>
-                </div>
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex items-center">
-                  <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center mr-4">
-                    <Store className="w-6 h-6 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-500">Active Markets</p>
-                    <h3 className="text-2xl font-black text-slate-800">{markets.length}</h3>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* User Management Form */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                  <div className="p-6 border-b border-slate-100">
-                    <h3 className="text-lg font-bold text-slate-800 flex items-center">
-                      <Users className="w-5 h-5 mr-2 text-slate-400" />
-                      Add New User
-                    </h3>
-                  </div>
-                  <div className="p-6">
-                    <form onSubmit={handleAddUser} className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Name</label>
-                        <input 
-                          type="text" 
-                          required
-                          value={newUser.name}
-                          onChange={e => setNewUser({...newUser, name: e.target.value})}
-                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                          placeholder="John Doe"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Email</label>
-                        <input 
-                          type="email" 
-                          required
-                          value={newUser.email}
-                          onChange={e => setNewUser({...newUser, email: e.target.value})}
-                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                          placeholder="john@example.com"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Role</label>
-                          <select 
-                            value={newUser.role}
-                            onChange={e => setNewUser({...newUser, role: e.target.value})}
-                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                          >
-                            <option value="TM">TM</option>
-                            <option value="RSM">RSM</option>
-                            <option value="IT">IT</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Market</label>
-                          <select 
-                            value={newUser.market}
-                            onChange={e => setNewUser({...newUser, market: e.target.value})}
-                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                          >
-                            {markets.map(m => <option key={m} value={m}>{m}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                      <button type="submit" className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm transition-colors mt-2">
-                        Add User
-                      </button>
-                    </form>
-                  </div>
-                </div>
-
-                {/* Master Data Entry Form */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                  <div className="p-6 border-b border-slate-100">
-                    <h3 className="text-lg font-bold text-slate-800 flex items-center">
-                      <FileText className="w-5 h-5 mr-2 text-slate-400" />
-                      Master Data Entry (IT)
-                    </h3>
-                  </div>
-                  <div className="p-6">
-                    <form onSubmit={handleMasterDataSubmit} className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Market</label>
-                        <select 
-                          value={masterData.market}
-                          onChange={e => setMasterData({...masterData, market: e.target.value})}
-                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                        >
-                          {markets.map(m => <option key={m} value={m}>{m}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Category</label>
-                        <select 
-                          value={masterData.category}
-                          onChange={e => setMasterData({...masterData, category: e.target.value})}
-                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                        >
-                          <option value="Spirit">Spirit</option>
-                          <option value="Wine">Wine</option>
-                          <option value="Beer">Beer</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Sales Quantity</label>
-                        <input 
-                          type="number" 
-                          required
-                          value={masterData.salesQty}
-                          onChange={e => setMasterData({...masterData, salesQty: e.target.value})}
-                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                          placeholder="Enter sales quantity"
-                        />
-                      </div>
-                      <button type="submit" className="w-full py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg text-sm transition-colors mt-2">
-                        Save Master Data
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              </div>
-
-              {/* Market-TM Mapping */}
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mt-6">
-                <div className="p-6 border-b border-slate-100">
-                  <h3 className="text-lg font-bold text-slate-800 flex items-center">
-                    <Store className="w-5 h-5 mr-2 text-slate-400" />
-                    Market-TM Mapping
-                  </h3>
-                </div>
-                <div className="p-0 overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-100">
-                        <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Market</th>
-                        <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Assigned TM Email</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {markets.map(market => (
-                        <tr key={market} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium text-slate-800">{market}</td>
-                          <td className="px-6 py-4">
-                            <input 
-                              type="email"
-                              value={marketMappings[market] || ''}
-                              onChange={e => handleUpdateMapping(market, e.target.value)}
-                              placeholder="Assign TM Email"
-                              className="w-full max-w-xs px-3 py-1.5 bg-white border border-slate-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                            />
-                          </td>
-                        </tr>
-                      ))}
                     </tbody>
                   </table>
                 </div>
