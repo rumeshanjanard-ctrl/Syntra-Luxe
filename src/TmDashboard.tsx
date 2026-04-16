@@ -134,9 +134,7 @@ export default function TmDashboard() {
 
   const handleLogout = async () => {
     try {
-      const channel = supabase.channel('online-users');
-      await channel.untrack();
-      supabase.removeChannel(channel);
+      await supabase.removeAllChannels();
       await supabase.auth.signOut();
     } catch (e) {
       console.error(e);

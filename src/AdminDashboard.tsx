@@ -15,7 +15,8 @@ import {
   Package,
   AlertTriangle,
   AlertCircle,
-  Download
+  Download,
+  MapPin
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -143,6 +144,13 @@ export default function AdminDashboard() {
 
   const [currentUser, setCurrentUser] = useState<any>(null);
 
+  // Coverage State
+  const [coverageVisits, setCoverageVisits] = useState<{outlet_id: string, updated_at: string}[]>([]);
+  const [loadingCoverage, setLoadingCoverage] = useState(false);
+  const [coverageTM, setCoverageTM] = useState('All');
+  const [coverageMarket, setCoverageMarket] = useState('All');
+  const [coverageSearch, setCoverageSearch] = useState('');
+
   // Fetch user name
   useEffect(() => {
     const userStr = localStorage.getItem('currentUser');
@@ -209,6 +217,97 @@ export default function AdminDashboard() {
 
     fetchReportData();
   }, [activeMenu, reportStartDate, reportEndDate]);
+
+  // Fetch Coverage Data
+  useEffect(() => {
+    const fetchCoverage = async () => {
+      if (activeMenu !== 'Coverage' || outlets.length === 0) return;
+      
+      setLoadingCoverage(true);
+      
+      // Fetch stock entries just to calculate coverage
+      const { data: allEntries } = await supabase
+        .from('stock_entries')
+        .select('outlet_id, updated_at');
+        
+      setCoverageVisits(allEntries || []);
+      setLoadingCoverage(false);
+    };
+
+    fetchCoverage();
+  }, [activeMenu, outlets]);
+
+  const coverageDisplayData = useMemo(() => {
+    let targetOutlets = outlets;
+    
+    if (coverageTM !== 'All') {
+      const allowedMarkets = Object.entries(marketMappings)
+        .filter(([_, email]) => email === coverageTM)
+        .map(([m]) => m);
+      targetOutlets = targetOutlets.filter(o => allowedMarkets.includes(o.market));
+    }
+    
+    if (coverageMarket !== 'All') {
+      targetOutlets = targetOutlets.filter(o => o.market === coverageMarket);
+    }
+    
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const todayEntries = coverageVisits.filter(e => new Date(e.updated_at) >= startOfToday);
+    const visitedOutletIds = new Set(todayEntries.map(e => e.outlet_id));
+    
+    const lastVisitedMap = new Map<string, string>();
+    coverageVisits.forEach(entry => {
+      const current = lastVisitedMap.get(entry.outlet_id);
+      if (!current || new Date(entry.updated_at) > new Date(current)) {
+        lastVisitedMap.set(entry.outlet_id, entry.updated_at);
+      }
+    });
+
+    let unvisited = targetOutlets.filter(o => !visitedOutletIds.has(o.id));
+    
+    const percentage = targetOutlets.length > 0 
+      ? Math.round(((targetOutlets.length - unvisited.length) / targetOutlets.length) * 100) 
+      : 0;
+
+    if (coverageSearch) {
+      const q = coverageSearch.toLowerCase();
+      unvisited = unvisited.filter(o => 
+        o.outlet_name?.toLowerCase().includes(q) || 
+        o.im_code?.toLowerCase().includes(q)
+      );
+    }
+
+    const needsFilter = coverageTM === 'All' && coverageMarket === 'All';
+
+    return {
+      percentage,
+      totalTarget: targetOutlets.length,
+      visitedCount: targetOutlets.length - unvisited.length,
+      unvisitedOutlets: needsFilter ? [] : unvisited.map(o => ({ ...o, lastVisited: lastVisitedMap.get(o.id) })),
+      needsFilter
+    };
+  }, [outlets, coverageVisits, coverageTM, coverageMarket, coverageSearch, marketMappings]);
+
+  const handleExportCoverage = () => {
+    if (coverageDisplayData.unvisitedOutlets.length === 0) return;
+    
+    const csvContent = "Outlet Name,IM Code,Market,Channel,Last Visited\n" + 
+      coverageDisplayData.unvisitedOutlets.map(o => 
+        `"${o.outlet_name}","${o.im_code}","${o.market}","${o.channel}","${o.lastVisited ? new Date(o.lastVisited).toLocaleDateString() : 'Never'}"`
+      ).join("\n");
+      
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `pending_coverage_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Presence Tracking
   useEffect(() => {
@@ -423,9 +522,7 @@ export default function AdminDashboard() {
 
   const handleLogout = async () => {
     try {
-      const channel = supabase.channel('online-users');
-      await channel.untrack();
-      supabase.removeChannel(channel);
+      await supabase.removeAllChannels();
       await supabase.auth.signOut();
     } catch (e) {
       console.error(e);
@@ -549,21 +646,8 @@ export default function AdminDashboard() {
       <aside className="w-64 bg-[#f8f9fa] border-r border-slate-200 flex flex-col z-20 hidden md:flex text-[13px] text-slate-700">
         {/* Logo */}
         <div className="h-14 flex items-center px-4 mb-2">
-          <div className="w-7 h-7 bg-[#2b6bed] rounded flex items-center justify-center mr-3 shadow-sm">
-            <Package className="w-4 h-4 text-white" />
-          </div>
           <div className="flex flex-col">
-            <span className="font-semibold text-slate-800 leading-tight">Stock</span>
-            <span className="text-xs text-slate-500 leading-tight">ERPNext</span>
-          </div>
-          <ChevronDown className="w-4 h-4 ml-auto text-slate-400" />
-        </div>
-        
-        {/* Search & Notification */}
-        <div className="px-4 mb-4 space-y-1">
-          <div className="flex items-center py-1.5 px-2 hover:bg-slate-100 rounded cursor-pointer text-slate-600">
-            <Bell className="w-4 h-4 mr-3 text-slate-400" />
-            <span>Notification</span>
+            <span className="font-semibold text-slate-800 leading-tight">Syntra Luxe</span>
           </div>
         </div>
 
@@ -573,31 +657,35 @@ export default function AdminDashboard() {
             <li>
               <button 
                 onClick={() => setActiveMenu('Dashboard')}
-                className={`w-full flex items-center px-2 py-1.5 rounded ${activeMenu === 'Dashboard' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
+                className={`w-full flex items-center px-4 py-1.5 rounded ${activeMenu === 'Dashboard' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
               >
-                <BarChart2 className={`w-4 h-4 mr-3 ${activeMenu === 'Dashboard' ? 'text-[#2b6bed]' : 'text-slate-400'}`} />
                 Dashboard
               </button>
             </li>
             <li>
               <button 
-                onClick={() => setActiveMenu('Outlets Manager')}
-                className={`w-full flex items-center px-2 py-1.5 rounded ${activeMenu === 'Outlets Manager' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
+                onClick={() => setActiveMenu('Coverage')}
+                className={`w-full flex items-center px-4 py-1.5 rounded ${activeMenu === 'Coverage' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
               >
-                <Package className={`w-4 h-4 mr-3 ${activeMenu === 'Outlets Manager' ? 'text-[#2b6bed]' : 'text-slate-400'}`} />
+                Today's Coverage
+              </button>
+            </li>
+            <li>
+              <button 
+                onClick={() => setActiveMenu('Outlets Manager')}
+                className={`w-full flex items-center px-4 py-1.5 rounded ${activeMenu === 'Outlets Manager' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
+              >
                 Stock Entry
               </button>
             </li>
             <li>
               <button 
                 onClick={() => setActiveMenu('Reports')}
-                className={`w-full flex items-center justify-between px-2 py-1.5 rounded ${activeMenu === 'Reports' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
+                className={`w-full flex items-center justify-between px-4 py-1.5 rounded ${activeMenu === 'Reports' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
               >
                 <div className="flex items-center">
-                  <FileText className={`w-4 h-4 mr-3 ${activeMenu === 'Reports' ? 'text-[#2b6bed]' : 'text-slate-400'}`} />
                   Reports
                 </div>
-                <ChevronDown className="w-3 h-3 text-slate-400" />
               </button>
             </li>
           </ul>
@@ -606,9 +694,6 @@ export default function AdminDashboard() {
         {/* User Profile */}
         <div className="p-4 border-t border-slate-200 mt-auto">
           <div className="flex items-center gap-3 cursor-pointer" onClick={handleLogout}>
-            <div className="w-8 h-8 rounded-full bg-[#e8f0fe] text-[#2b6bed] flex items-center justify-center font-medium text-xs">
-              {userName.substring(0, 2).toUpperCase()}
-            </div>
             <div className="flex flex-col overflow-hidden">
               <span className="text-sm font-medium text-slate-700 truncate">{userName}</span>
               <span className="text-xs text-slate-500 truncate">{currentUser?.email}</span>
@@ -631,7 +716,7 @@ export default function AdminDashboard() {
                 <div className="flex items-center text-sm text-slate-500">
                   <LayoutDashboard className="w-4 h-4 mr-2" />
                   <span>/ Dashboard /</span>
-                  <span className="text-slate-900 font-medium ml-1">Stock</span>
+                  <span className="text-slate-900 font-medium ml-1">Overview</span>
                 </div>
                 <button className="p-1.5 rounded bg-slate-100 text-slate-500 hover:bg-slate-200">
                   <span className="font-bold tracking-widest leading-none">...</span>
@@ -1000,6 +1085,160 @@ export default function AdminDashboard() {
                       )}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeMenu === 'Coverage' && (
+            <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto flex flex-col gap-6">
+              
+              {/* Coverage Filters & Top Bar */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center shrink-0">
+                    <MapPin className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl font-bold text-slate-900 tracking-tight">Today's Coverage</h1>
+                    <p className="text-sm text-slate-500">Track outlet visits and pending tasks</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <select 
+                    value={coverageTM} 
+                    onChange={e => { setCoverageTM(e.target.value); setCoverageMarket('All'); }} 
+                    className="p-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white min-w-[150px]"
+                  >
+                    <option value="All">All TMs</option>
+                    {systemUsers.filter(u => u.role === 'TM' || u.role === 'RSM').map(u => (
+                      <option key={u.id} value={u.email}>{u.name || u.email}</option>
+                    ))}
+                  </select>
+                  
+                  <select 
+                    value={coverageMarket} 
+                    onChange={e => setCoverageMarket(e.target.value)} 
+                    className="p-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white min-w-[150px]"
+                  >
+                    {uniqueMarkets.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+
+                  <button 
+                    onClick={handleExportCoverage}
+                    disabled={coverageDisplayData.unvisitedOutlets.length === 0 || coverageDisplayData.needsFilter}
+                    className="flex items-center px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Export Pending
+                  </button>
+                </div>
+              </div>
+
+              {/* Coverage Summary Card */}
+              <div className="bg-white rounded-2xl p-8 shadow-sm flex items-center justify-between border-l-4 border-purple-500">
+                <div>
+                  <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Coverage Completion</h2>
+                  <div className="flex items-end gap-4">
+                    <span className="text-5xl font-black text-slate-900 tracking-tighter">{coverageDisplayData.percentage}%</span>
+                    <span className="text-sm font-semibold text-slate-500 mb-1">
+                      ({coverageDisplayData.visitedCount} of {coverageDisplayData.totalTarget} Selected Outlets Visited)
+                    </span>
+                  </div>
+                </div>
+                <div className="w-24 h-24 rounded-full border-8 border-slate-100 flex items-center justify-center relative">
+                  <div 
+                    className="absolute inset-0 rounded-full border-8 border-purple-500 transition-all duration-1000"
+                    style={{ clipPath: `polygon(0 0, 100% 0, 100% ${coverageDisplayData.percentage}%, 0 ${coverageDisplayData.percentage}%)` }} 
+                  ></div>
+                  <MapPin className="w-8 h-8 text-slate-300" />
+                </div>
+              </div>
+
+              {/* Red List */}
+              <div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-6 bg-red-500 rounded-full"></div>
+                    <h3 className="text-xl font-bold text-slate-900">The Red List 
+                      {!coverageDisplayData.needsFilter && (
+                        <span className="text-sm font-medium text-slate-500 ml-2">({coverageDisplayData.unvisitedOutlets.length} Pending)</span>
+                      )}
+                    </h3>
+                  </div>
+
+                  {!coverageDisplayData.needsFilter && (
+                    <div className="relative max-w-sm w-full">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input 
+                        type="text" 
+                        placeholder="Search pending outlets..." 
+                        value={coverageSearch}
+                        onChange={(e) => setCoverageSearch(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+                
+                <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-red-100 min-h-[400px] flex flex-col">
+                  {coverageDisplayData.needsFilter ? (
+                    <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
+                      <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+                        <MapPin className="w-8 h-8 text-slate-400" />
+                      </div>
+                      <h4 className="text-lg font-bold text-slate-900 mb-2">Filter to View Pending Outlets</h4>
+                      <p className="text-sm text-slate-500 max-w-sm">Please select a Territory Manager or Market from the filters above to load the pending outlets list. Loading all outlets by default is disabled to maintain performance.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-12 bg-red-50 px-6 py-4 border-b border-red-100">
+                        <div className="col-span-5 text-[10px] font-bold uppercase tracking-widest text-red-900">Outlet Name</div>
+                        <div className="col-span-4 text-[10px] font-bold uppercase tracking-widest text-red-900">Area / Route</div>
+                        <div className="col-span-3 text-[10px] font-bold uppercase tracking-widest text-red-900 text-right">Last Visited</div>
+                      </div>
+
+                      <div className="divide-y divide-red-50 flex-1 overflow-auto">
+                        {loadingCoverage ? (
+                          <div className="p-8 text-center text-sm text-slate-500">Calculating coverage...</div>
+                        ) : coverageDisplayData.unvisitedOutlets.length === 0 ? (
+                          <div className="p-12 flex flex-col items-center justify-center text-center">
+                            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
+                              <MapPin className="w-8 h-8 text-green-500" />
+                            </div>
+                            <h4 className="text-lg font-bold text-green-700 mb-1">Coverage Complete!</h4>
+                            <p className="text-sm text-green-600/80">All selected outlets have been visited today.</p>
+                          </div>
+                        ) : (
+                          coverageDisplayData.unvisitedOutlets.map((outlet) => (
+                            <div key={outlet.id} className="grid grid-cols-12 px-6 py-5 items-center hover:bg-red-50/50 transition-colors">
+                              <div className="col-span-5 flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-xs shrink-0">
+                                  {outlet.outlet_name?.substring(0, 1).toUpperCase()}
+                                </div>
+                                <div className="overflow-hidden">
+                                  <p className="text-sm font-bold text-slate-900 truncate">{outlet.outlet_name}</p>
+                                  <p className="text-[10px] text-slate-500 truncate">{outlet.im_code}</p>
+                                </div>
+                              </div>
+                              <div className="col-span-4">
+                                <p className="text-sm font-semibold text-slate-700">{outlet.market}</p>
+                                <p className="text-xs text-slate-500">{outlet.channel}</p>
+                              </div>
+                              <div className="col-span-3 text-right">
+                                {outlet.lastVisited ? (
+                                  <p className="text-sm font-medium text-slate-700">{new Date(outlet.lastVisited).toLocaleDateString()}</p>
+                                ) : (
+                                  <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-[10px] font-bold uppercase">Never</span>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

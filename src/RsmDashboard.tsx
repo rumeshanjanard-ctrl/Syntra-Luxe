@@ -15,6 +15,10 @@ export default function RsmDashboard() {
     channel: 'All Channels'
   });
 
+  const [activeMenu, setActiveMenu] = useState('Overview');
+  const [coverageData, setCoverageData] = useState<{ percentage: number; unvisitedOutlets: (Outlet & { lastVisited?: string })[] }>({ percentage: 0, unvisitedOutlets: [] });
+  const [loadingCoverage, setLoadingCoverage] = useState(false);
+
   useEffect(() => {
     const fetchOutlets = async () => {
       const userStr = localStorage.getItem('currentUser');
@@ -52,11 +56,51 @@ export default function RsmDashboard() {
   const uniqueMarkets = ['All Markets', ...Array.from(new Set(outlets.map(o => o.market).filter(Boolean)))];
   const uniqueChannels = ['All Channels', ...Array.from(new Set(outlets.map(o => o.channel).filter(Boolean)))];
 
+  useEffect(() => {
+    const fetchCoverage = async () => {
+      if (activeMenu !== 'Coverage' || filteredOutlets.length === 0) return;
+      
+      setLoadingCoverage(true);
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+
+      const outletIds = filteredOutlets.map(o => o.id);
+
+      // Fetch stock entries just to calculate coverage
+      const { data: allEntries } = await supabase
+        .from('stock_entries')
+        .select('outlet_id, updated_at');
+        
+      const todayEntries = (allEntries || []).filter(e => new Date(e.updated_at) >= startOfToday);
+      const visitedOutletIds = new Set(todayEntries.map(e => e.outlet_id));
+      
+      const unvisited = filteredOutlets.filter(o => !visitedOutletIds.has(o.id));
+      const percentage = Math.round(((filteredOutlets.length - unvisited.length) / filteredOutlets.length) * 100) || 0;
+
+      const lastVisitedMap = new Map<string, string>();
+      if (allEntries) {
+        allEntries.forEach(entry => {
+          const current = lastVisitedMap.get(entry.outlet_id);
+          if (!current || new Date(entry.updated_at) > new Date(current)) {
+            lastVisitedMap.set(entry.outlet_id, entry.updated_at);
+          }
+        });
+      }
+
+      setCoverageData({
+        percentage,
+        unvisitedOutlets: unvisited.map(o => ({ ...o, lastVisited: lastVisitedMap.get(o.id) }))
+      });
+      
+      setLoadingCoverage(false);
+    };
+
+    fetchCoverage();
+  }, [activeMenu, filteredOutlets]);
+
   const handleLogout = async () => {
     try {
-      const channel = supabase.channel('online-users');
-      await channel.untrack();
-      supabase.removeChannel(channel);
+      await supabase.removeAllChannels();
       await supabase.auth.signOut();
     } catch (e) {
       console.error(e);
@@ -70,26 +114,48 @@ export default function RsmDashboard() {
       {/* Navigation Drawer (Sidebar) */}
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-100 h-full fixed left-0 top-0 z-40 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
         <div className="px-8 py-6 mb-4 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-[#2b6bed] flex items-center justify-center shadow-md shadow-[#2b6bed]/20">
-            <span className="material-symbols-outlined text-white text-lg">bar_chart</span>
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-950 via-purple-900 to-indigo-950 flex items-center justify-center shadow-sm border border-indigo-800/50 shrink-0">
+            <span className="text-transparent bg-clip-text bg-gradient-to-tr from-amber-200 via-fuchsia-400 to-cyan-300 font-black text-lg italic" style={{ fontFamily: 'serif' }}>S</span>
           </div>
-          <span className="text-slate-800 font-black text-xl tracking-tight">StockMaster</span>
+          <span className="text-slate-800 font-black text-xl tracking-tight">Syntra Luxe</span>
         </div>
         <nav className="flex flex-col gap-2 flex-1 px-4">
-          {/* Overview - Active */}
-          <button className="bg-[#f4f7fb] text-[#2b6bed] px-4 py-3.5 rounded-2xl flex items-center gap-3 transition-all duration-300 w-full text-left font-bold shadow-sm">
+          <button 
+            onClick={() => setActiveMenu('Overview')}
+            className={`px-4 py-3.5 rounded-2xl flex items-center gap-3 transition-all duration-300 w-full text-left font-bold ${activeMenu === 'Overview' ? 'bg-[#f4f7fb] text-[#2b6bed] shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}
+          >
             <span className="material-symbols-outlined text-[20px]">dashboard</span>
             <span className="text-sm">Overview</span>
           </button>
-          <button className="text-slate-500 hover:text-slate-800 hover:bg-slate-50 px-4 py-3.5 rounded-2xl flex items-center gap-3 transition-all duration-300 w-full text-left font-bold">
+          
+          <button 
+            onClick={() => setActiveMenu('Coverage')}
+            className={`px-4 py-3.5 rounded-2xl flex items-center gap-3 transition-all duration-300 w-full text-left font-bold ${activeMenu === 'Coverage' ? 'bg-[#f4f7fb] text-[#2b6bed] shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}
+          >
+            <span className="material-symbols-outlined text-[20px]">location_on</span>
+            <span className="text-sm">Today's Coverage</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveMenu('Stock Matrix')}
+            className={`px-4 py-3.5 rounded-2xl flex items-center gap-3 transition-all duration-300 w-full text-left font-bold ${activeMenu === 'Stock Matrix' ? 'bg-[#f4f7fb] text-[#2b6bed] shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}
+          >
             <span className="material-symbols-outlined text-[20px]">grid_view</span>
             <span className="text-sm">Stock Matrix</span>
           </button>
-          <button className="text-slate-500 hover:text-slate-800 hover:bg-slate-50 px-4 py-3.5 rounded-2xl flex items-center gap-3 transition-all duration-300 w-full text-left font-bold">
+
+          <button 
+            onClick={() => setActiveMenu('OOS Alerts')}
+            className={`px-4 py-3.5 rounded-2xl flex items-center gap-3 transition-all duration-300 w-full text-left font-bold ${activeMenu === 'OOS Alerts' ? 'bg-[#f4f7fb] text-[#2b6bed] shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}
+          >
             <span className="material-symbols-outlined text-[20px]">notification_important</span>
             <span className="text-sm">OOS Alerts</span>
           </button>
-          <button className="text-slate-500 hover:text-slate-800 hover:bg-slate-50 px-4 py-3.5 rounded-2xl flex items-center gap-3 transition-all duration-300 w-full text-left font-bold">
+
+          <button 
+            onClick={() => setActiveMenu('TM Performance')}
+            className={`px-4 py-3.5 rounded-2xl flex items-center gap-3 transition-all duration-300 w-full text-left font-bold ${activeMenu === 'TM Performance' ? 'bg-[#f4f7fb] text-[#2b6bed] shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}
+          >
             <span className="material-symbols-outlined text-[20px]">analytics</span>
             <span className="text-sm">TM Performance</span>
           </button>
@@ -175,110 +241,197 @@ export default function RsmDashboard() {
 
         {/* Main Dashboard Canvas */}
         <div className="px-10 py-8 flex-1">
-          {/* KPI Grid */}
-          <div className="grid grid-cols-4 gap-6 mb-10">
-            {/* KPI 1 */}
-            <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm border-b-4 border-primary">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-4">Outlets Covered</p>
-              <div className="flex items-end justify-between">
-                <span className="text-4xl font-extrabold tracking-tighter text-on-surface">{filteredOutlets.length}</span>
-                <span className="text-primary font-bold text-xs mb-2 flex items-center">
-                  <span className="material-symbols-outlined text-sm mr-1">trending_up</span>Total
-                </span>
-              </div>
-            </div>
+          {activeMenu === 'Overview' && (
+            <>
+              {/* KPI Grid */}
+              <div className="grid grid-cols-4 gap-6 mb-10">
+                {/* KPI 1 */}
+                <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm border-b-4 border-primary">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-4">Outlets Covered</p>
+                  <div className="flex items-end justify-between">
+                    <span className="text-4xl font-extrabold tracking-tighter text-on-surface">{filteredOutlets.length}</span>
+                    <span className="text-primary font-bold text-xs mb-2 flex items-center">
+                      <span className="material-symbols-outlined text-sm mr-1">trending_up</span>Total
+                    </span>
+                  </div>
+                </div>
 
-            {/* KPI 2 (Danger) */}
-            <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm border-b-4 border-error">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-4">OOS SKUs</p>
-              <div className="flex items-end justify-between">
-                <span className="text-4xl font-extrabold tracking-tighter text-error">42</span>
-                <span className="text-error font-bold text-xs mb-2 flex items-center">
-                  <span className="material-symbols-outlined text-sm mr-1">warning</span>High
-                </span>
-              </div>
-            </div>
+                {/* KPI 2 (Danger) */}
+                <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm border-b-4 border-error">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-4">OOS SKUs</p>
+                  <div className="flex items-end justify-between">
+                    <span className="text-4xl font-extrabold tracking-tighter text-error">42</span>
+                    <span className="text-error font-bold text-xs mb-2 flex items-center">
+                      <span className="material-symbols-outlined text-sm mr-1">warning</span>High
+                    </span>
+                  </div>
+                </div>
 
-            {/* KPI 3 (Success) */}
-            <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm border-b-4 border-primary-container">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-4">Fast Movers Avail.</p>
-              <div className="flex items-end justify-between">
-                <span className="text-4xl font-extrabold tracking-tighter text-primary-container">94.2%</span>
-                <span className="text-primary-container font-bold text-xs mb-2 flex items-center">
-                  <span className="material-symbols-outlined text-sm mr-1">check_circle</span>Optimum
-                </span>
-              </div>
-            </div>
+                {/* KPI 3 (Success) */}
+                <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm border-b-4 border-primary-container">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-4">Fast Movers Avail.</p>
+                  <div className="flex items-end justify-between">
+                    <span className="text-4xl font-extrabold tracking-tighter text-primary-container">94.2%</span>
+                    <span className="text-primary-container font-bold text-xs mb-2 flex items-center">
+                      <span className="material-symbols-outlined text-sm mr-1">check_circle</span>Optimum
+                    </span>
+                  </div>
+                </div>
 
-            {/* KPI 4 (Amber) */}
-            <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm border-b-4 border-tertiary">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-4">Slow Movers Flagged</p>
-              <div className="flex items-end justify-between">
-                <span className="text-4xl font-extrabold tracking-tighter text-tertiary">186</span>
-                <span className="text-tertiary font-bold text-xs mb-2 flex items-center">
-                  <span className="material-symbols-outlined text-sm mr-1">history</span>Pending
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Content Area: Outlets Directory */}
-          <div className="flex flex-col gap-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-on-surface">Outlets Directory</h2>
-              <button className="text-primary text-[10px] font-bold uppercase tracking-widest hover:underline">View All</button>
-            </div>
-
-            <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
-              <div className="grid grid-cols-12 bg-surface-container-low px-6 py-4">
-                <div className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">IM Code</div>
-                <div className="col-span-3 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Outlet Name</div>
-                <div className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Channel / Market</div>
-                <div className="col-span-3 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">TM Info</div>
-                <div className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant text-right">Action</div>
+                {/* KPI 4 (Amber) */}
+                <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm border-b-4 border-tertiary">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-4">Slow Movers Flagged</p>
+                  <div className="flex items-end justify-between">
+                    <span className="text-4xl font-extrabold tracking-tighter text-tertiary">186</span>
+                    <span className="text-tertiary font-bold text-xs mb-2 flex items-center">
+                      <span className="material-symbols-outlined text-sm mr-1">history</span>Pending
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <div className="divide-y divide-surface-container">
-                {loading ? (
-                  <div className="p-8 text-center text-sm text-on-surface-variant">Loading outlets...</div>
-                ) : filteredOutlets.length === 0 ? (
-                  <div className="p-8 text-center text-sm text-on-surface-variant">No outlets found matching the filters.</div>
-                ) : (
-                  filteredOutlets.map((outlet) => (
-                    <div key={outlet.id} className="grid grid-cols-12 px-6 py-5 items-center hover:bg-surface-bright transition-colors">
-                      <div className="col-span-2">
-                        <span className="px-2 py-1 rounded bg-surface-container-high text-on-surface-variant text-[10px] font-black uppercase tracking-tighter">{outlet.im_code}</span>
-                      </div>
-                      <div className="col-span-3">
-                        <p className="text-sm font-bold text-on-surface">{outlet.outlet_name}</p>
-                        <p className="text-[10px] text-slate-500 uppercase font-medium">{outlet.field_role}</p>
-                      </div>
-                      <div className="col-span-2">
-                        <p className="text-sm font-medium text-on-surface">{outlet.channel}</p>
-                        <p className="text-[10px] text-slate-500">{outlet.market}</p>
-                      </div>
-                      <div className="col-span-3 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
-                          <span className="material-symbols-outlined text-slate-500 text-sm">person</span>
+              {/* Content Area: Outlets Directory */}
+              <div className="flex flex-col gap-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-on-surface">Outlets Directory</h2>
+                  <button className="text-primary text-[10px] font-bold uppercase tracking-widest hover:underline">View All</button>
+                </div>
+
+                <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+                  <div className="grid grid-cols-12 bg-surface-container-low px-6 py-4">
+                    <div className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">IM Code</div>
+                    <div className="col-span-3 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Outlet Name</div>
+                    <div className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Channel / Market</div>
+                    <div className="col-span-3 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">TM Info</div>
+                    <div className="col-span-2 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant text-right">Action</div>
+                  </div>
+
+                  <div className="divide-y divide-surface-container">
+                    {loading ? (
+                      <div className="p-8 text-center text-sm text-on-surface-variant">Loading outlets...</div>
+                    ) : filteredOutlets.length === 0 ? (
+                      <div className="p-8 text-center text-sm text-on-surface-variant">No outlets found matching the filters.</div>
+                    ) : (
+                      filteredOutlets.map((outlet) => (
+                        <div key={outlet.id} className="grid grid-cols-12 px-6 py-5 items-center hover:bg-surface-bright transition-colors">
+                          <div className="col-span-2">
+                            <span className="px-2 py-1 rounded bg-surface-container-high text-on-surface-variant text-[10px] font-black uppercase tracking-tighter">{outlet.im_code}</span>
+                          </div>
+                          <div className="col-span-3">
+                            <p className="text-sm font-bold text-on-surface">{outlet.outlet_name}</p>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium">{outlet.field_role}</p>
+                          </div>
+                          <div className="col-span-2">
+                            <p className="text-sm font-medium text-on-surface">{outlet.channel}</p>
+                            <p className="text-[10px] text-slate-500">{outlet.market}</p>
+                          </div>
+                          <div className="col-span-3 flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
+                              <span className="material-symbols-outlined text-slate-500 text-sm">person</span>
+                            </div>
+                            <div className="overflow-hidden">
+                              <p className="text-sm font-bold text-on-surface truncate">{outlet.tm_name}</p>
+                              <p className="text-[10px] text-slate-500 truncate">{outlet.tm_email}</p>
+                            </div>
+                          </div>
+                          <div className="col-span-2 text-right">
+                            <button className="text-primary font-bold text-xs px-4 py-2 hover:bg-primary/5 rounded-lg transition-colors">View Details</button>
+                          </div>
                         </div>
-                        <div className="overflow-hidden">
-                          <p className="text-sm font-bold text-on-surface truncate">{outlet.tm_name}</p>
-                          <p className="text-[10px] text-slate-500 truncate">{outlet.tm_email}</p>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeMenu === 'Coverage' && (
+            <div className="flex flex-col gap-6">
+              {/* Coverage Summary Card */}
+              <div className="bg-white rounded-2xl p-8 shadow-sm flex items-center justify-between border-l-4 border-[#2b6bed]">
+                <div>
+                  <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Today's Coverage</h2>
+                  <div className="flex items-end gap-4">
+                    <span className="text-5xl font-black text-slate-900 tracking-tighter">{coverageData.percentage}%</span>
+                    <span className="text-sm font-semibold text-slate-500 mb-1">
+                      ({filteredOutlets.length - coverageData.unvisitedOutlets.length} of {filteredOutlets.length} Outlets Visited)
+                    </span>
+                  </div>
+                </div>
+                <div className="w-24 h-24 rounded-full border-8 border-slate-100 flex items-center justify-center relative">
+                  <div 
+                    className="absolute inset-0 rounded-full border-8 border-[#2b6bed]"
+                    style={{ clipPath: `polygon(0 0, 100% 0, 100% ${coverageData.percentage}%, 0 ${coverageData.percentage}%)` }} 
+                  ></div>
+                  <span className="material-symbols-outlined text-3xl text-slate-300">location_on</span>
+                </div>
+              </div>
+
+              {/* Red List */}
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-2 h-6 bg-red-500 rounded-full"></div>
+                  <h3 className="text-xl font-bold text-slate-900">The Red List <span className="text-sm font-medium text-slate-500 ml-2">({coverageData.unvisitedOutlets.length} Pending)</span></h3>
+                </div>
+                
+                <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-red-100">
+                  <div className="grid grid-cols-12 bg-red-50 px-6 py-4 border-b border-red-100">
+                    <div className="col-span-5 text-[10px] font-bold uppercase tracking-widest text-red-900">Outlet Name</div>
+                    <div className="col-span-4 text-[10px] font-bold uppercase tracking-widest text-red-900">Area / Route</div>
+                    <div className="col-span-3 text-[10px] font-bold uppercase tracking-widest text-red-900 text-right">Last Visited</div>
+                  </div>
+
+                  <div className="divide-y divide-red-50">
+                    {loadingCoverage ? (
+                      <div className="p-8 text-center text-sm text-slate-500">Calculating coverage...</div>
+                    ) : coverageData.unvisitedOutlets.length === 0 ? (
+                      <div className="p-8 text-center text-sm text-green-600 font-bold bg-green-50">All selected outlets have been visited today!</div>
+                    ) : (
+                      coverageData.unvisitedOutlets.map((outlet) => (
+                        <div key={outlet.id} className="grid grid-cols-12 px-6 py-5 items-center hover:bg-red-50/50 transition-colors">
+                          <div className="col-span-5 flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-xs shrink-0">
+                              {outlet.outlet_name.substring(0, 1).toUpperCase()}
+                            </div>
+                            <div className="overflow-hidden">
+                              <p className="text-sm font-bold text-slate-900 truncate">{outlet.outlet_name}</p>
+                              <p className="text-[10px] text-slate-500 truncate">{outlet.im_code}</p>
+                            </div>
+                          </div>
+                          <div className="col-span-4">
+                            <p className="text-sm font-semibold text-slate-700">{outlet.market}</p>
+                            <p className="text-xs text-slate-500">{outlet.channel}</p>
+                          </div>
+                          <div className="col-span-3 text-right">
+                            {outlet.lastVisited ? (
+                              <p className="text-sm font-medium text-slate-700">{new Date(outlet.lastVisited).toLocaleDateString()}</p>
+                            ) : (
+                              <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-[10px] font-bold uppercase">Never</span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      <div className="col-span-2 text-right">
-                        <button className="text-primary font-bold text-xs px-4 py-2 hover:bg-primary/5 rounded-lg transition-colors">View Details</button>
-                      </div>
-                    </div>
-                  ))
-                )}
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
+
+          {activeMenu !== 'Overview' && activeMenu !== 'Coverage' && (
+            <div className="flex items-center justify-center h-64 bg-white rounded-2xl shadow-sm border border-slate-100">
+              <div className="text-center">
+                <span className="material-symbols-outlined text-4xl text-slate-300 mb-2">construction</span>
+                <h3 className="text-lg font-bold text-slate-800">Module under development</h3>
+                <p className="text-sm text-slate-500">This section will be available soon.</p>
+              </div>
+            </div>
+          )}
 
           {/* Bottom Note */}
           <footer className="mt-12 py-6 flex items-center justify-between border-t border-slate-200">
-            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-widest">StockMaster v2.4.0 — Financial Architect View</p>
+            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-widest">Syntra Luxe v2.4.0 — Financial Architect View</p>
             <div className="flex gap-4">
               <span className="text-[10px] text-slate-400 font-bold uppercase cursor-pointer hover:text-slate-600">Privacy Policy</span>
               <span className="text-[10px] text-slate-400 font-bold uppercase cursor-pointer hover:text-slate-600">Terms of Service</span>

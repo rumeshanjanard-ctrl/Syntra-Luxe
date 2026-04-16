@@ -93,10 +93,10 @@ export default function Login() {
       <main className="relative w-full max-w-[440px] z-10">
         {/* Brand Identity Header */}
         <header className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#2b6bed] mb-6 shadow-lg shadow-[#2b6bed]/20">
-            <span className="material-symbols-outlined text-white text-3xl">bar_chart</span>
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-[20px] bg-gradient-to-br from-indigo-950 via-purple-900 to-indigo-950 mb-6 shadow-xl border border-indigo-800/50">
+            <span className="text-transparent bg-clip-text bg-gradient-to-tr from-amber-200 via-fuchsia-400 to-cyan-300 font-black text-4xl italic" style={{ fontFamily: 'serif' }}>S</span>
           </div>
-          <h1 className="font-black text-3xl tracking-tight text-slate-800 mb-2">StockMaster</h1>
+          <h1 className="font-black text-3xl tracking-tight text-slate-800 mb-2">Syntra Luxe</h1>
           <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">Luxury Brand Stock Tracking</p>
         </header>
 
