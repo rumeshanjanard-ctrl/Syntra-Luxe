@@ -114,9 +114,6 @@ export default function RsmDashboard() {
       {/* Navigation Drawer (Sidebar) */}
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-100 h-full fixed left-0 top-0 z-40 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
         <div className="px-8 py-6 mb-4 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-950 via-purple-900 to-indigo-950 flex items-center justify-center shadow-sm border border-indigo-800/50 shrink-0">
-            <span className="text-transparent bg-clip-text bg-gradient-to-tr from-amber-200 via-fuchsia-400 to-cyan-300 font-black text-lg italic" style={{ fontFamily: 'serif' }}>S</span>
-          </div>
           <span className="text-slate-800 font-black text-xl tracking-tight">Syntra Luxe</span>
         </div>
         <nav className="flex flex-col gap-2 flex-1 px-4">

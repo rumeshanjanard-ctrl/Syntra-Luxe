@@ -65,7 +65,11 @@ export default function Login() {
         }
         
         // Save user info to localStorage
-        localStorage.setItem('currentUser', JSON.stringify({ email, role, id: authData.user.id }));
+        localStorage.setItem('currentUser', JSON.stringify({ 
+          email: email.toLowerCase(), 
+          role, 
+          id: authData.user.id 
+        }));
 
         // Redirect based on role
         if (role === 'Admin' || role === 'RSM') {
@@ -93,9 +97,6 @@ export default function Login() {
       <main className="relative w-full max-w-[440px] z-10">
         {/* Brand Identity Header */}
         <header className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-[20px] bg-gradient-to-br from-indigo-950 via-purple-900 to-indigo-950 mb-6 shadow-xl border border-indigo-800/50">
-            <span className="text-transparent bg-clip-text bg-gradient-to-tr from-amber-200 via-fuchsia-400 to-cyan-300 font-black text-4xl italic" style={{ fontFamily: 'serif' }}>S</span>
-          </div>
           <h1 className="font-black text-3xl tracking-tight text-slate-800 mb-2">Syntra Luxe</h1>
           <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">Luxury Brand Stock Tracking</p>
         </header>
@@ -130,7 +131,6 @@ export default function Login() {
             <div className="space-y-2">
               <div className="flex justify-between items-end ml-1">
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500" htmlFor="password">Password</label>
-                {!isSignUp && <a className="text-[10px] font-bold uppercase tracking-widest text-[#2b6bed] hover:text-[#124bd8] transition-colors" href="#">Forgot Password?</a>}
               </div>
               <div className="relative group">
                 <input 
@@ -154,20 +154,6 @@ export default function Login() {
             >
               {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In to Account')}
             </button>
-
-            {/* Alternative Action */}
-            <div className="pt-2 text-center">
-              <p className="text-slate-500 text-xs font-medium">
-                {isSignUp ? 'Already have an account?' : "Don't have an account?"} 
-                <button 
-                  type="button"
-                  onClick={() => { setIsSignUp(!isSignUp); setError(''); }}
-                  className="text-[#2b6bed] font-bold hover:underline decoration-2 underline-offset-4 ml-1"
-                >
-                  {isSignUp ? 'Sign In' : 'Sign Up'}
-                </button>
-              </p>
-            </div>
           </form>
         </section>
 

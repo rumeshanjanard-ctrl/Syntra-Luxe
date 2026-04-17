@@ -16,7 +16,10 @@ import {
   AlertTriangle,
   AlertCircle,
   Download,
-  MapPin
+  MapPin,
+  ShieldCheck,
+  UserPlus,
+  CheckCircle2
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -147,8 +150,8 @@ export default function AdminDashboard() {
   // Coverage State
   const [coverageVisits, setCoverageVisits] = useState<{outlet_id: string, updated_at: string}[]>([]);
   const [loadingCoverage, setLoadingCoverage] = useState(false);
-  const [coverageTM, setCoverageTM] = useState('All');
   const [coverageMarket, setCoverageMarket] = useState('All');
+  const [coverageStatus, setCoverageStatus] = useState<'All' | 'Visited' | 'Pending'>('All');
   const [coverageSearch, setCoverageSearch] = useState('');
 
   // Fetch user name
@@ -240,13 +243,6 @@ export default function AdminDashboard() {
   const coverageDisplayData = useMemo(() => {
     let targetOutlets = outlets;
     
-    if (coverageTM !== 'All') {
-      const allowedMarkets = Object.entries(marketMappings)
-        .filter(([_, email]) => email === coverageTM)
-        .map(([m]) => m);
-      targetOutlets = targetOutlets.filter(o => allowedMarkets.includes(o.market));
-    }
-    
     if (coverageMarket !== 'All') {
       targetOutlets = targetOutlets.filter(o => o.market === coverageMarket);
     }
@@ -255,7 +251,7 @@ export default function AdminDashboard() {
     startOfToday.setHours(0, 0, 0, 0);
 
     const todayEntries = coverageVisits.filter(e => new Date(e.updated_at) >= startOfToday);
-    const visitedOutletIds = new Set(todayEntries.map(e => e.outlet_id));
+    const visitedTodayIds = new Set(todayEntries.map(e => e.outlet_id));
     
     const lastVisitedMap = new Map<string, string>();
     coverageVisits.forEach(entry => {
@@ -265,44 +261,60 @@ export default function AdminDashboard() {
       }
     });
 
-    let unvisited = targetOutlets.filter(o => !visitedOutletIds.has(o.id));
-    
-    const percentage = targetOutlets.length > 0 
-      ? Math.round(((targetOutlets.length - unvisited.length) / targetOutlets.length) * 100) 
-      : 0;
+    let mapped = targetOutlets.map(o => ({ 
+      ...o, 
+      isEverVisited: lastVisitedMap.has(o.id),
+      visitedToday: visitedTodayIds.has(o.id),
+      lastVisited: lastVisitedMap.get(o.id)
+    }));
 
     if (coverageSearch) {
       const q = coverageSearch.toLowerCase();
-      unvisited = unvisited.filter(o => 
+      mapped = mapped.filter(o => 
         o.outlet_name?.toLowerCase().includes(q) || 
         o.im_code?.toLowerCase().includes(q)
       );
     }
 
-    const needsFilter = coverageTM === 'All' && coverageMarket === 'All';
+    // Filter by ever visited status as requested
+    let filtered = [...mapped];
+    if (coverageStatus === 'Visited') {
+      filtered = filtered.filter(o => o.isEverVisited);
+    } else if (coverageStatus === 'Pending') {
+      filtered = filtered.filter(o => !o.isEverVisited);
+    }
+
+    const needsFilter = coverageMarket === 'All';
+
+    // Percentage logic based on today's coverage for the filtered set
+    // This ensures accuracy when filtering by market
+    const filteredVisitedToday = filtered.filter(o => o.visitedToday).length;
+    const percentage = filtered.length > 0 
+      ? Math.round((filteredVisitedToday / filtered.length) * 100) 
+      : 0;
 
     return {
       percentage,
-      totalTarget: targetOutlets.length,
-      visitedCount: targetOutlets.length - unvisited.length,
-      unvisitedOutlets: needsFilter ? [] : unvisited.map(o => ({ ...o, lastVisited: lastVisitedMap.get(o.id) })),
+      totalCount: filtered.length,
+      doneCount: filteredVisitedToday,
+      displayOutlets: needsFilter ? [] : filtered,
       needsFilter
     };
-  }, [outlets, coverageVisits, coverageTM, coverageMarket, coverageSearch, marketMappings]);
+  }, [outlets, coverageVisits, coverageMarket, coverageStatus, coverageSearch]);
 
   const handleExportCoverage = () => {
-    if (coverageDisplayData.unvisitedOutlets.length === 0) return;
+    if (coverageDisplayData.displayOutlets.length === 0) return;
     
-    const csvContent = "Outlet Name,IM Code,Market,Channel,Last Visited\n" + 
-      coverageDisplayData.unvisitedOutlets.map(o => 
-        `"${o.outlet_name}","${o.im_code}","${o.market}","${o.channel}","${o.lastVisited ? new Date(o.lastVisited).toLocaleDateString() : 'Never'}"`
+    const csvContent = "Status,IM Code,Outlet Name,Market,Channel,Last Visited\n" + 
+      coverageDisplayData.displayOutlets.map(o => 
+        `"${o.isEverVisited ? 'Visited' : 'Pending'}","${o.im_code}","${o.outlet_name}","${o.market}","${o.channel}","${o.lastVisited ? new Date(o.lastVisited).toLocaleDateString() : 'Never'}"`
       ).join("\n");
       
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", `pending_coverage_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`);
+    link.setAttribute("download", `coverage_report_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -311,39 +323,63 @@ export default function AdminDashboard() {
 
   // Presence Tracking
   useEffect(() => {
-    const channel = supabase.channel('online-users');
+    if (!currentUser?.email) return;
 
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const newState = channel.presenceState();
-        const users: Record<string, any> = {};
-        for (const id in newState) {
-          if (newState[id].length > 0) {
-             const presence = newState[id][0] as any;
-             if (presence.user_email) {
-               users[presence.user_email] = presence;
-             }
+    const channel = supabase.channel('online-users', {
+      config: {
+        presence: {
+          key: currentUser.email.toLowerCase(),
+        },
+      },
+    });
+
+    const updatePresence = () => {
+      const newState = channel.presenceState();
+      const users: Record<string, any> = {};
+      for (const key in newState) {
+        if (newState[key] && newState[key].length > 0) {
+          const presence = newState[key][0] as any;
+          if (presence.user_email) {
+            users[presence.user_email.toLowerCase().trim()] = presence;
           }
         }
-        setOnlineUsers(users);
+      }
+      setOnlineUsers(users);
+    };
+
+    channel
+      .on('presence', { event: 'sync' }, updatePresence)
+      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+        updatePresence();
       })
       .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
         if (leftPresences.length > 0) {
-           const presence = leftPresences[0] as any;
-           if (presence.user_email) {
-             setLastSeenUsers(prev => ({
-               ...prev,
-               [presence.user_email]: new Date().toISOString()
-             }));
-           }
+          const presence = leftPresences[0] as any;
+          if (presence.user_email) {
+            const email = presence.user_email.toLowerCase();
+            setLastSeenUsers(prev => ({
+              ...prev,
+              [email]: new Date().toISOString()
+            }));
+          }
         }
+        updatePresence();
       })
-      .subscribe();
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({
+            user_email: currentUser.email,
+            name: userName,
+            role: currentUser.role,
+            online_at: new Date().toISOString()
+          });
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentUser, userName]);
 
   const outletMap = useMemo(() => {
     const map = new Map<string, Outlet>();
@@ -647,7 +683,7 @@ export default function AdminDashboard() {
         {/* Logo */}
         <div className="h-14 flex items-center px-4 mb-2">
           <div className="flex flex-col">
-            <span className="font-semibold text-slate-800 leading-tight">Syntra Luxe</span>
+            <span className="font-bold text-slate-800 text-[25px]">Syntra Luxe</span>
           </div>
         </div>
 
@@ -659,6 +695,7 @@ export default function AdminDashboard() {
                 onClick={() => setActiveMenu('Dashboard')}
                 className={`w-full flex items-center px-4 py-1.5 rounded ${activeMenu === 'Dashboard' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
               >
+                <BarChart2 className={`w-4 h-4 mr-3 ${activeMenu === 'Dashboard' ? 'text-[#2b6bed]' : 'text-slate-400'}`} />
                 Dashboard
               </button>
             </li>
@@ -667,7 +704,8 @@ export default function AdminDashboard() {
                 onClick={() => setActiveMenu('Coverage')}
                 className={`w-full flex items-center px-4 py-1.5 rounded ${activeMenu === 'Coverage' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
               >
-                Today's Coverage
+                <MapPin className={`w-4 h-4 mr-3 ${activeMenu === 'Coverage' ? 'text-[#2b6bed]' : 'text-slate-400'}`} />
+                Coverage
               </button>
             </li>
             <li>
@@ -675,6 +713,7 @@ export default function AdminDashboard() {
                 onClick={() => setActiveMenu('Outlets Manager')}
                 className={`w-full flex items-center px-4 py-1.5 rounded ${activeMenu === 'Outlets Manager' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
               >
+                <Package className={`w-4 h-4 mr-3 ${activeMenu === 'Outlets Manager' ? 'text-[#2b6bed]' : 'text-slate-400'}`} />
                 Stock Entry
               </button>
             </li>
@@ -684,19 +723,39 @@ export default function AdminDashboard() {
                 className={`w-full flex items-center justify-between px-4 py-1.5 rounded ${activeMenu === 'Reports' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
               >
                 <div className="flex items-center">
+                  <FileText className={`w-4 h-4 mr-3 ${activeMenu === 'Reports' ? 'text-[#2b6bed]' : 'text-slate-400'}`} />
                   Reports
                 </div>
               </button>
             </li>
+            {currentUser?.email === 'rumeshanjanard@gmail.com' && (
+              <li>
+                <button 
+                  onClick={() => setActiveMenu('Tracking Directory')}
+                  className={`w-full flex items-center px-4 py-1.5 rounded ${activeMenu === 'Tracking Directory' ? 'bg-white shadow-sm font-medium text-slate-900' : 'hover:bg-slate-100 text-slate-600'}`}
+                >
+                  <ShieldCheck className={`w-4 h-4 mr-3 ${activeMenu === 'Tracking Directory' ? 'text-[#2b6bed]' : 'text-slate-400'}`} />
+                  Tracking Directory
+                </button>
+              </li>
+            )}
           </ul>
         </nav>
         
         {/* User Profile */}
         <div className="p-4 border-t border-slate-200 mt-auto">
-          <div className="flex items-center gap-3 cursor-pointer" onClick={handleLogout}>
+          <div className="flex items-center gap-3 cursor-pointer group" onClick={handleLogout}>
+            <div className="relative">
+              <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-lg shadow-indigo-100">
+                {userName.substring(0, 2).toUpperCase()}
+              </div>
+              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white shadow-sm"></div>
+            </div>
             <div className="flex flex-col overflow-hidden">
-              <span className="text-sm font-medium text-slate-700 truncate">{userName}</span>
-              <span className="text-xs text-slate-500 truncate">{currentUser?.email}</span>
+              <span className="text-sm font-bold text-slate-800 truncate group-hover:text-indigo-600 transition-colors">{userName}</span>
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-slate-500 truncate">{currentUser?.email}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -713,10 +772,11 @@ export default function AdminDashboard() {
               
               {/* Breadcrumb */}
               <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center text-sm text-slate-500">
-                  <LayoutDashboard className="w-4 h-4 mr-2" />
-                  <span>/ Dashboard /</span>
-                  <span className="text-slate-900 font-medium ml-1">Overview</span>
+                <div className="flex items-center text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                  <LayoutDashboard className="w-3.5 h-3.5 mr-2 text-indigo-500" />
+                  <span className="hover:text-slate-600 transition-colors">Dashboard</span>
+                  <span className="mx-2 text-slate-200">/</span>
+                  <span className="text-slate-900 font-black">Overview</span>
                 </div>
                 <button className="p-1.5 rounded bg-slate-100 text-slate-500 hover:bg-slate-200">
                   <span className="font-bold tracking-widest leading-none">...</span>
@@ -1091,147 +1151,145 @@ export default function AdminDashboard() {
           )}
 
           {activeMenu === 'Coverage' && (
-            <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto flex flex-col gap-6">
+            <div className="p-4 sm:p-5 max-w-7xl mx-auto flex flex-col gap-4">
               
               {/* Coverage Filters & Top Bar */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center shrink-0">
-                    <MapPin className="w-5 h-5 text-purple-600" />
+                  <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
+                    <MapPin className="w-4 h-4 text-indigo-600" />
                   </div>
                   <div>
-                    <h1 className="text-xl font-bold text-slate-900 tracking-tight">Today's Coverage</h1>
-                    <p className="text-sm text-slate-500">Track outlet visits and pending tasks</p>
+                    <h1 className="text-lg font-bold text-slate-900 tracking-tight">Coverage</h1>
+                    <p className="text-xs text-slate-500">Track outlet visits and status</p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <select 
-                    value={coverageTM} 
-                    onChange={e => { setCoverageTM(e.target.value); setCoverageMarket('All'); }} 
-                    className="p-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white min-w-[150px]"
+                    value={coverageStatus} 
+                    onChange={e => setCoverageStatus(e.target.value as any)} 
+                    className="p-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white min-w-[120px]"
                   >
-                    <option value="All">All TMs</option>
-                    {systemUsers.filter(u => u.role === 'TM' || u.role === 'RSM').map(u => (
-                      <option key={u.id} value={u.email}>{u.name || u.email}</option>
-                    ))}
+                    <option value="All">All Status</option>
+                    <option value="Visited">Visited</option>
+                    <option value="Pending">Pending</option>
                   </select>
-                  
+
                   <select 
                     value={coverageMarket} 
                     onChange={e => setCoverageMarket(e.target.value)} 
-                    className="p-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white min-w-[150px]"
+                    className="p-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white min-w-[140px]"
                   >
-                    {uniqueMarkets.map(m => <option key={m} value={m}>{m}</option>)}
+                    {uniqueMarkets.map(m => <option key={m} value={m}>{m === 'All' ? 'Select Market' : m}</option>)}
                   </select>
 
                   <button 
                     onClick={handleExportCoverage}
-                    disabled={coverageDisplayData.unvisitedOutlets.length === 0 || coverageDisplayData.needsFilter}
-                    className="flex items-center px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                    disabled={coverageDisplayData.displayOutlets.length === 0 || coverageDisplayData.needsFilter}
+                    className="flex items-center px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors"
                   >
-                    <Download className="w-4 h-4 mr-2" />
-                    Export Pending
+                    <Download className="w-3.5 h-3.5 mr-1.5" />
+                    Export
                   </button>
                 </div>
               </div>
 
-              {/* Coverage Summary Card */}
-              <div className="bg-white rounded-2xl p-8 shadow-sm flex items-center justify-between border-l-4 border-purple-500">
-                <div>
-                  <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Coverage Completion</h2>
-                  <div className="flex items-end gap-4">
-                    <span className="text-5xl font-black text-slate-900 tracking-tighter">{coverageDisplayData.percentage}%</span>
-                    <span className="text-sm font-semibold text-slate-500 mb-1">
-                      ({coverageDisplayData.visitedCount} of {coverageDisplayData.totalTarget} Selected Outlets Visited)
-                    </span>
-                  </div>
-                </div>
-                <div className="w-24 h-24 rounded-full border-8 border-slate-100 flex items-center justify-center relative">
-                  <div 
-                    className="absolute inset-0 rounded-full border-8 border-purple-500 transition-all duration-1000"
-                    style={{ clipPath: `polygon(0 0, 100% 0, 100% ${coverageDisplayData.percentage}%, 0 ${coverageDisplayData.percentage}%)` }} 
-                  ></div>
-                  <MapPin className="w-8 h-8 text-slate-300" />
-                </div>
-              </div>
-
-              {/* Red List */}
-              <div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              {/* List Section */}
+              <div className="flex flex-col gap-3 min-h-0">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <div className="w-2 h-6 bg-red-500 rounded-full"></div>
-                    <h3 className="text-xl font-bold text-slate-900">The Red List 
+                    <div className={`w-1.5 h-5 ${coverageStatus === 'Visited' ? 'bg-green-500' : coverageStatus === 'Pending' ? 'bg-red-500' : 'bg-indigo-500'} rounded-full`}></div>
+                    <h3 className="text-base font-bold text-slate-800">
+                      {coverageStatus === 'Visited' ? 'Visited Outlets' : coverageStatus === 'Pending' ? 'Pending Outlets' : 'Outlet List'}
                       {!coverageDisplayData.needsFilter && (
-                        <span className="text-sm font-medium text-slate-500 ml-2">({coverageDisplayData.unvisitedOutlets.length} Pending)</span>
+                        <span className="text-[11px] font-medium text-slate-500 ml-2">({coverageDisplayData.displayOutlets.length})</span>
                       )}
                     </h3>
                   </div>
 
                   {!coverageDisplayData.needsFilter && (
-                    <div className="relative max-w-sm w-full">
-                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <div className="relative max-w-xs w-full">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                       <input 
                         type="text" 
-                        placeholder="Search pending outlets..." 
+                        placeholder="Search outlets..." 
                         value={coverageSearch}
                         onChange={(e) => setCoverageSearch(e.target.value)}
-                        className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                        className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                       />
                     </div>
                   )}
                 </div>
                 
-                <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-red-100 min-h-[400px] flex flex-col">
+                <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-slate-100 flex-1 flex flex-col min-h-[350px]">
                   {coverageDisplayData.needsFilter ? (
-                    <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
-                      <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-                        <MapPin className="w-8 h-8 text-slate-400" />
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50/30">
+                      <div className="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center mb-3">
+                        <MapPin className="w-6 h-6 text-slate-300" />
                       </div>
-                      <h4 className="text-lg font-bold text-slate-900 mb-2">Filter to View Pending Outlets</h4>
-                      <p className="text-sm text-slate-500 max-w-sm">Please select a Territory Manager or Market from the filters above to load the pending outlets list. Loading all outlets by default is disabled to maintain performance.</p>
+                      <h4 className="text-sm font-bold text-slate-800 mb-1">Select a Market</h4>
+                      <p className="text-[11px] text-slate-500 max-w-[240px]">Please select a market from the filter above to view coverage details.</p>
                     </div>
                   ) : (
                     <>
-                      <div className="grid grid-cols-12 bg-red-50 px-6 py-4 border-b border-red-100">
-                        <div className="col-span-5 text-[10px] font-bold uppercase tracking-widest text-red-900">Outlet Name</div>
-                        <div className="col-span-4 text-[10px] font-bold uppercase tracking-widest text-red-900">Area / Route</div>
-                        <div className="col-span-3 text-[10px] font-bold uppercase tracking-widest text-red-900 text-right">Last Visited</div>
+                      <div className="grid grid-cols-12 bg-slate-50/80 px-4 py-2.5 border-b border-slate-100">
+                        <div className="col-span-5 text-[10px] font-bold uppercase tracking-tight text-slate-500">Outlet Details</div>
+                        <div className="col-span-2 text-[10px] font-bold uppercase tracking-tight text-slate-500">Channel</div>
+                        <div className="col-span-2 text-[10px] font-bold uppercase tracking-tight text-slate-500 text-center">Status</div>
+                        <div className="col-span-3 text-[10px] font-bold uppercase tracking-tight text-slate-500 text-right">Last Activity</div>
                       </div>
 
-                      <div className="divide-y divide-red-50 flex-1 overflow-auto">
+                      <div className="divide-y divide-slate-50 flex-1 overflow-auto custom-scrollbar">
                         {loadingCoverage ? (
-                          <div className="p-8 text-center text-sm text-slate-500">Calculating coverage...</div>
-                        ) : coverageDisplayData.unvisitedOutlets.length === 0 ? (
+                          <div className="p-8 text-center text-xs text-slate-400 animate-pulse font-medium">Loading data...</div>
+                        ) : coverageDisplayData.displayOutlets.length === 0 ? (
                           <div className="p-12 flex flex-col items-center justify-center text-center">
-                            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
-                              <MapPin className="w-8 h-8 text-green-500" />
+                            <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center mb-3">
+                              <Search className="w-6 h-6 text-slate-300" />
                             </div>
-                            <h4 className="text-lg font-bold text-green-700 mb-1">Coverage Complete!</h4>
-                            <p className="text-sm text-green-600/80">All selected outlets have been visited today.</p>
+                            <h4 className="text-sm font-bold text-slate-800 mb-1">No outlets found</h4>
+                            <p className="text-[11px] text-slate-500 italic">Try adjusting your search or filters.</p>
                           </div>
                         ) : (
-                          coverageDisplayData.unvisitedOutlets.map((outlet) => (
-                            <div key={outlet.id} className="grid grid-cols-12 px-6 py-5 items-center hover:bg-red-50/50 transition-colors">
+                          coverageDisplayData.displayOutlets.map((outlet) => (
+                            <div key={outlet.id} className="grid grid-cols-12 px-4 py-4 items-center hover:bg-slate-50/80 transition-all border-b border-transparent hover:border-slate-100">
                               <div className="col-span-5 flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-xs shrink-0">
+                                <div className={`w-8 h-8 rounded flex items-center justify-center font-bold text-[11px] shrink-0 border ${outlet.isEverVisited ? 'bg-green-50 text-green-700 border-green-100' : 'bg-red-50 text-red-700 border-red-100'}`}>
                                   {outlet.outlet_name?.substring(0, 1).toUpperCase()}
                                 </div>
                                 <div className="overflow-hidden">
-                                  <p className="text-sm font-bold text-slate-900 truncate">{outlet.outlet_name}</p>
-                                  <p className="text-[10px] text-slate-500 truncate">{outlet.im_code}</p>
+                                  <p className="text-xs font-bold text-slate-900 truncate leading-tight mb-0.5">{outlet.outlet_name}</p>
+                                  <p className="text-[10px] font-medium text-slate-400 truncate tracking-wide">{outlet.im_code}</p>
                                 </div>
                               </div>
-                              <div className="col-span-4">
-                                <p className="text-sm font-semibold text-slate-700">{outlet.market}</p>
-                                <p className="text-xs text-slate-500">{outlet.channel}</p>
+                              <div className="col-span-2">
+                                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-tighter">{outlet.channel}</span>
+                              </div>
+                              <div className="col-span-2 text-center">
+                                {outlet.isEverVisited ? (
+                                  <div className="flex justify-center">
+                                    <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase text-green-700 px-3 py-1 rounded bg-green-50 border border-green-200">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-green-600"></div> Visited
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="flex justify-center">
+                                    <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase text-red-600 px-3 py-1 rounded bg-red-50 border border-red-200">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-red-600 shadow-[0_0_5px_rgba(220,38,38,0.5)]"></div> Pending
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                               <div className="col-span-3 text-right">
-                                {outlet.lastVisited ? (
-                                  <p className="text-sm font-medium text-slate-700">{new Date(outlet.lastVisited).toLocaleDateString()}</p>
-                                ) : (
-                                  <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-[10px] font-bold uppercase">Never</span>
-                                )}
+                                <div className="flex flex-col items-end">
+                                  <p className="text-[11px] font-bold text-slate-700 font-mono tracking-tighter">
+                                    {outlet.lastVisited ? new Date(outlet.lastVisited).toLocaleDateString('en-GB') : '--/--/----'}
+                                  </p>
+                                  <p className="text-[9px] text-slate-400 font-medium">
+                                    {outlet.lastVisited ? new Date(outlet.lastVisited).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Never Visited'}
+                                  </p>
+                                </div>
                               </div>
                             </div>
                           ))
@@ -1239,6 +1297,292 @@ export default function AdminDashboard() {
                       </div>
                     </>
                   )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeMenu === 'Tracking Directory' && currentUser?.email === 'rumeshanjanard@gmail.com' && (
+            <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto flex flex-col gap-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                    Tracking Directory
+                    <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Enterprise</span>
+                  </h1>
+                  <p className="text-sm text-slate-500 font-medium">Manage personnel and real-time field tracking protocols</p>
+                </div>
+                <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100">
+                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                  <span className="text-[11px] font-bold text-slate-600 uppercase tracking-widest">Tracking Live</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1 space-y-6">
+                  <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                    <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <div className="p-1.5 bg-slate-100 rounded-lg"><UserPlus className="w-3.5 h-3.5" /></div>
+                      Provision New User
+                    </h3>
+                    <form onSubmit={handleAddUser} className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Full Name</label>
+                        <input 
+                          type="text" 
+                          required
+                          value={newUser.name}
+                          onChange={e => setNewUser({ ...newUser, name: e.target.value })}
+                          className="w-full bg-slate-50/50 border border-slate-200 px-4 py-2.5 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all"
+                          placeholder="e.g. Kasun Perera"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Email Address</label>
+                        <input 
+                          type="email" 
+                          required
+                          value={newUser.email}
+                          onChange={e => setNewUser({ ...newUser, email: e.target.value })}
+                          className="w-full bg-slate-50/50 border border-slate-200 px-4 py-2.5 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all"
+                          placeholder="name@company.com"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Privilege Role</label>
+                          <select 
+                            value={newUser.role}
+                            onChange={e => setNewUser({ ...newUser, role: e.target.value })}
+                            className="w-full bg-slate-50/50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 bg-white"
+                          >
+                            <option value="TM">TM</option>
+                            <option value="RSM">RSM</option>
+                            <option value="Admin">Admin</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Assigned Market</label>
+                          <select 
+                            value={newUser.market}
+                            onChange={e => setNewUser({ ...newUser, market: e.target.value })}
+                            className="w-full bg-slate-50/50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 bg-white"
+                          >
+                            {uniqueMarkets.filter(m => m !== 'All').map(m => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <button 
+                        type="submit"
+                        className="w-full bg-indigo-600 hover:bg-black text-white px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-indigo-100 mt-2"
+                      >
+                        Grant Access
+                      </button>
+                    </form>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                          <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
+                          Live Signal Monitor
+                        </h3>
+                        <button 
+                          onClick={() => window.location.reload()}
+                          className="p-1 hover:bg-slate-100 rounded transition-colors"
+                          title="Refresh Connections"
+                        >
+                          <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                        {Object.keys(onlineUsers).length === 0 ? (
+                          <div className="p-3 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-center">
+                            <p className="text-[10px] font-medium text-slate-400 italic">Listening for incoming satellite signals...</p>
+                          </div>
+                        ) : (
+                          Object.entries(onlineUsers).map(([email, presence]: [string, any]) => (
+                            <div key={email} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100 hover:border-indigo-100 transition-colors">
+                              <div className="flex items-center gap-3 overflow-hidden">
+                                <div className="w-6 h-6 rounded-lg bg-white shadow-sm flex items-center justify-center text-[10px] font-black text-indigo-600 border border-slate-100 shrink-0">
+                                  {presence.role?.substring(0, 1) || '?'}
+                                </div>
+                                <div className="flex flex-col overflow-hidden">
+                                  <span className="text-[10px] font-black text-slate-700 leading-tight truncate">{presence.name || email}</span>
+                                  <span className="text-[9px] font-bold text-slate-400 tracking-tight truncate">{email}</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${presence.role === 'Admin' ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                                  {presence.role || 'Unknown'}
+                                </span>
+                                <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]"></div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      
+                      <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
+                        <div className="flex flex-col">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight leading-none">Status Code</span>
+                          <span className="text-[10px] font-bold text-green-600 leading-none mt-1 uppercase">PULSE_ESTABLISHED</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <div className="w-4 h-1 bg-indigo-500 rounded-full opacity-20"></div>
+                          <div className="w-4 h-1 bg-indigo-500 rounded-full opacity-40"></div>
+                          <div className="w-4 h-1 bg-indigo-500 rounded-full opacity-60"></div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-slate-900 to-indigo-950 rounded-2xl p-6 text-white shadow-xl">
+                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-200 mb-4">Tracking Protocol</h4>
+                      <ul className="space-y-4">
+                        <li className="flex gap-3">
+                          <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                            <span className="text-[10px] font-bold text-indigo-300">A</span>
+                          </div>
+                          <p className="text-[10px] text-indigo-100/80 leading-relaxed font-medium">Real-time sync via Supabase Presence encrypted channels.</p>
+                        </li>
+                        <li className="flex gap-3">
+                          <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                            <span className="text-[10px] font-bold text-indigo-300">B</span>
+                          </div>
+                          <p className="text-[10px] text-indigo-100/80 leading-relaxed font-medium">Auto-purge of presence data on session termination.</p>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-2 space-y-4">
+                  <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                      <div className="flex flex-col">
+                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest italic">Personnel Tracking Directory</h3>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">Live field synchronization active</p>
+                      </div>
+                      <div className="flex items-center gap-4 text-[10px] font-bold text-slate-400">
+                        <div className="flex items-center gap-1.5 font-black text-green-600 bg-green-50 px-2 py-1 rounded-lg">
+                          <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                          {Object.values(onlineUsers).filter((u: any) => u.role === 'TM').length} ONLINE TMs
+                        </div>
+                        <div className="flex items-center gap-2 bg-slate-100 px-2 py-1 rounded-lg">
+                          <span className="text-[9px] font-bold text-slate-400">TOTAL PULSES: {Object.keys(onlineUsers).length}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="overflow-auto custom-scrollbar max-h-[600px]">
+                      <table className="w-full text-left">
+                        <thead className="sticky top-0 bg-white z-10">
+                          <tr className="border-b border-slate-100">
+                            <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Personnel Identity</th>
+                            <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Assigned Market</th>
+                            <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Connectivity</th>
+                            <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Status Hub</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {systemUsers.filter((u: any) => u.role === 'TM').length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="px-6 py-12 text-center bg-slate-50/30">
+                                <div className="flex flex-col items-center justify-center">
+                                  <div className="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center mb-3">
+                                    <Users className="w-6 h-6 text-slate-200" />
+                                  </div>
+                                  <h4 className="text-sm font-bold text-slate-800 mb-1">No personnel registered</h4>
+                                  <p className="text-[11px] text-slate-500 italic">Register TMs in the Provisioning section to start tracking.</p>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : (
+                            systemUsers.filter((u: any) => u.role === 'TM')
+                            .sort((a, b) => {
+                              const aOnline = !!onlineUsers[a.email?.toLowerCase()];
+                              const bOnline = !!onlineUsers[b.email?.toLowerCase()];
+                              if (aOnline && !bOnline) return -1;
+                              if (!aOnline && bOnline) return 1;
+                              return 0;
+                            })
+                            .map((user: any) => {
+                              const email = user.email?.toLowerCase().trim();
+                              const isOnline = onlineUsers[email];
+                              const lastSeen = lastSeenUsers[email];
+                              
+                              return (
+                                <tr key={user.id} className="hover:bg-slate-50/80 transition-all group border-b border-slate-50 last:border-0">
+                                  <td className="px-6 py-4">
+                                    <div className="flex items-center gap-3">
+                                      <div className="relative">
+                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-[10px] ${isOnline ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-100 text-slate-500'}`}>
+                                          {(onlineUsers[email]?.name || user.name || 'U').substring(0, 1).toUpperCase()}
+                                        </div>
+                                        {isOnline && (
+                                          <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white animate-pulse shadow-[0_0_5px_rgba(34,197,94,0.5)]"></div>
+                                        )}
+                                      </div>
+                                      <div className="overflow-hidden">
+                                        <p className="text-xs font-black text-slate-900 truncate leading-tight mb-0.5">
+                                          {onlineUsers[email]?.name || user.name}
+                                        </p>
+                                        <div className="flex items-center gap-2">
+                                          <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 text-[9px] font-black rounded uppercase tracking-tighter ring-1 ring-indigo-100">{user.role}</span>
+                                          <span className="text-[10px] font-medium text-slate-400 truncate tracking-tight">{user.email}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 text-center">
+                                    <span className="text-[10px] font-black text-slate-600 bg-slate-100 px-2 py-0.5 rounded uppercase tracking-tight">{user.market || 'General'}</span>
+                                  </td>
+                                  <td className="px-6 py-4 text-center">
+                                    {isOnline ? (
+                                      <div className="flex items-center justify-center gap-2">
+                                        <div className="flex gap-0.5">
+                                          <div className="w-1 h-3 bg-green-500 rounded-sm animate-pulse"></div>
+                                          <div className="w-1 h-3 bg-green-500/60 rounded-sm animate-pulse delay-75"></div>
+                                        </div>
+                                        <span className="text-[10px] font-black text-green-600 uppercase tracking-widest">Active Pulse</span>
+                                      </div>
+                                    ) : (
+                                      <div className="flex flex-col items-center">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Offline</span>
+                                        <span className="text-[9px] font-medium text-slate-300 italic">
+                                          {lastSeen ? `Last: ${new Date(lastSeen).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 'No pulse recorded'}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="px-6 py-4 text-right">
+                                    {isOnline ? (
+                                      <span className="inline-block px-2 py-0.5 bg-green-100 text-green-700 text-[9px] font-black rounded uppercase ring-1 ring-green-200">Live now</span>
+                                    ) : (
+                                      <button 
+                                        className="text-slate-300 hover:text-red-500 transition-colors"
+                                        onClick={() => {
+                                          if (confirm('Retire personnel from system?')) {
+                                            setSystemUsers(systemUsers.filter((u: any) => u.id !== user.id));
+                                          }
+                                        }}
+                                      >
+                                        <div className="p-1 px-2 border border-slate-100 rounded text-[9px] font-bold uppercase hover:bg-red-50 hover:border-red-100">Retire</div>
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
