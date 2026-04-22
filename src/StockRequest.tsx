@@ -183,10 +183,10 @@ export default function StockRequest() {
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 h-full flex flex-col relative overflow-hidden bg-[#f4f6f9] w-full max-w-[420px] md:max-w-none mx-auto -mt-6 md:-mt-0 rounded-t-[2rem] md:rounded-none z-10 pt-6 md:pt-0">
+        <main className="flex-1 h-full flex flex-col relative overflow-hidden w-full max-w-[420px] md:max-w-none mx-auto">
           
           {/* Mobile Top Header - Dark Blue */}
-          <header className="md:hidden pt-8 pb-12 px-6 flex items-center justify-between bg-[#1e2a52] text-white z-10 shrink-0 rounded-b-[2rem] relative top-0 left-0 right-0 max-w-[420px] mx-auto -translate-y-6">
+          <header className="md:hidden pt-8 pb-12 px-6 flex items-center justify-between bg-[#1e2a52] text-white z-10 shrink-0 rounded-b-[2rem] relative">
             <div className="absolute inset-0 overflow-hidden rounded-b-[2rem] pointer-events-none opacity-10">
                <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
                  <path d="M0,0 L100,100 M100,0 L0,100" stroke="currentColor" strokeWidth="2" />
@@ -204,29 +204,30 @@ export default function StockRequest() {
           </header>
 
           {/* Content Canvas */}
-          <div className="flex-1 px-6 md:px-10 pb-24 md:pb-10 overflow-y-auto hide-scrollbar relative z-20">
-            <div className="max-w-4xl mx-auto w-full pt-2 md:pt-8 bg-[#f4f6f9] min-h-full">
-              
-              <div className="hidden md:block mb-8">
-                <h2 className="text-3xl font-bold text-[#1e2a52] tracking-tight">Bulk Stock Request</h2>
-                <p className="text-slate-500 text-sm mt-1 font-medium">Request new stock for your market</p>
-              </div>
-
-              {submitSuccess && (
-                <div className="mb-6 bg-green-50 border border-green-200 rounded-3xl p-4 flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
-                  <div className="bg-green-100 text-green-600 p-2 rounded-full">
-                    <CheckCircle2 size={20} />
-                  </div>
-                  <div>
-                    <h4 className="text-[#1e2a52] font-bold text-sm">Request Sent Successfully!</h4>
-                    <p className="text-slate-500 text-xs mt-0.5 font-medium">RSM and Warehouse team have been notified.</p>
-                  </div>
+          <div className="flex-1 bg-transparent overflow-hidden flex flex-col relative -mt-6">
+            <div className="flex-1 px-5 md:px-10 pb-28 md:pb-10 overflow-y-auto hide-scrollbar pt-6 bg-[#f4f6f9] md:bg-white rounded-t-[2rem] md:rounded-none shadow-[0_-10px_40px_rgba(0,0,0,0.1)] md:shadow-none">
+              <div className="max-w-4xl mx-auto w-full pt-2 md:pt-8 min-h-full">
+                
+                <div className="hidden md:block mb-8">
+                  <h2 className="text-3xl font-bold text-[#1e2a52] tracking-tight">Bulk Stock Request</h2>
+                  <p className="text-slate-500 text-sm mt-1 font-medium">Request new stock for your market</p>
                 </div>
-              )}
 
-              {/* Request Form Card */}
-              <div className="bg-white rounded-3xl border-none shadow-[0_4px_20px_rgba(0,0,0,0.03)] p-6 md:p-8 mb-6 mt-4">
-                <div className="space-y-6">
+                {submitSuccess && (
+                  <div className="mb-6 bg-green-50 border border-green-200 rounded-3xl p-4 flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
+                    <div className="bg-green-100 text-green-600 p-2 rounded-full">
+                      <CheckCircle2 size={20} />
+                    </div>
+                    <div>
+                      <h4 className="text-[#1e2a52] font-bold text-sm">Request Sent Successfully!</h4>
+                      <p className="text-slate-500 text-xs mt-0.5 font-medium">RSM and Warehouse team have been notified.</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Request Form Card */}
+                <div className="bg-white md:bg-[#f4f6f9] rounded-3xl border-none shadow-[0_4px_20px_rgba(0,0,0,0.03)] p-6 md:p-8 mb-6 mt-4">
+                  <div className="space-y-6">
                   
                   {/* Market Field (Disabled) */}
                   <div>
@@ -325,6 +326,7 @@ export default function StockRequest() {
                 </div>
               )}
 
+              </div>
             </div>
           </div>
 
