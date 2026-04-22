@@ -393,42 +393,6 @@ export default function TmDashboard() {
                       </div>
                     </div>
 
-                    {/* Progress Component matching "Best Deals" Card Layout */}
-                    <div className="mb-6">
-                      <div className="flex justify-between items-center mb-1">
-                        <h3 className="text-lg font-bold text-[#1e2a52]">Rating & Reviews</h3>
-                        <span className="text-orange-400 font-bold flex items-center gap-1 text-sm"><Search size={14} className="opacity-0"/>★ 4.6</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 mb-4 font-medium flex justify-between">
-                        <span>Sorted by recent performance</span>
-                        <span>{outlets.length} Outlets</span>
-                      </p>
-                      
-                      <div className="bg-white rounded-2xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border-none relative overflow-hidden flex items-center gap-4">
-                        <div className="relative shrink-0">
-                           <svg className="w-16 h-16 -rotate-90">
-                              <circle cx="32" cy="32" r="28" fill="transparent" stroke="#f1f5f9" strokeWidth="6" />
-                              <circle cx="32" cy="32" r="28" fill="transparent" stroke="#ffb11a" strokeWidth="6" strokeDasharray={176} strokeDashoffset={176 - (176 * progressPercentage / 100)} strokeLinecap="round" />
-                           </svg>
-                           <div className="absolute inset-0 flex flex-col items-center justify-center">
-                              <span className="text-xs font-bold text-[#1e2a52]">{progressPercentage}%</span>
-                           </div>
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-bold text-[#1e2a52] text-sm mb-1">{completedCount} Completed</h4>
-                          <div className="flex items-center gap-1">
-                            <div className="flex text-[#ffb11a]">
-                              <span className="text-[10px]">★</span><span className="text-[10px]">★</span><span className="text-[10px]">★</span><span className="text-[10px]">★</span><span className="text-[10px] text-slate-200">★</span>
-                            </div>
-                            <span className="text-[10px] text-slate-400">{progressPercentage === 100 ? 'Target Met' : 'Active'}</span>
-                          </div>
-                          <p className="text-[10px] text-slate-500 leading-relaxed mt-2.5">
-                            {completedCount} tasks completed out of {outlets.length} total assigned outlets today. Maintain current efficiency.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
                     {/* Recent Entries Section - "Gallery" style */}
                     <section id="recent-entries-section" className="pb-4">
                       <h3 className="text-lg font-bold text-[#1e2a52] mb-1">Recent History</h3>
