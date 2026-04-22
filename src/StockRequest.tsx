@@ -183,27 +183,32 @@ export default function StockRequest() {
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 h-full flex flex-col relative overflow-hidden bg-white w-full max-w-[420px] md:max-w-none mx-auto">
+        <main className="flex-1 h-full flex flex-col relative overflow-hidden bg-[#f4f6f9] w-full max-w-[420px] md:max-w-none mx-auto -mt-6 md:-mt-0 rounded-t-[2rem] md:rounded-none z-10 pt-6 md:pt-0">
           
-          {/* Mobile Top Header */}
-          <header className="md:hidden pt-12 pb-4 px-6 flex items-center justify-between bg-white z-10 shrink-0">
-            <div className="flex items-center gap-3">
+          {/* Mobile Top Header - Dark Blue */}
+          <header className="md:hidden pt-8 pb-12 px-6 flex items-center justify-between bg-[#1e2a52] text-white z-10 shrink-0 rounded-b-[2rem] relative top-0 left-0 right-0 max-w-[420px] mx-auto -translate-y-6">
+            <div className="absolute inset-0 overflow-hidden rounded-b-[2rem] pointer-events-none opacity-10">
+               <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                 <path d="M0,0 L100,100 M100,0 L0,100" stroke="currentColor" strokeWidth="2" />
+               </svg>
+            </div>
+            <div className="flex items-center gap-3 relative z-10">
               <button 
                 onClick={() => navigate('/tm-dashboard')}
-                className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 text-slate-800 hover:bg-slate-200 transition-colors active:scale-95 duration-200"
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors border border-white/20 active:scale-95 duration-200"
               >
                 <span className="material-symbols-outlined">arrow_back</span>
               </button>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900">Syntra Luxe</h1>
+              <h1 className="text-xl font-bold tracking-tight text-white">Syntra Luxe</h1>
             </div>
           </header>
 
           {/* Content Canvas */}
-          <div className="flex-1 px-6 md:px-10 pb-24 md:pb-10 overflow-y-auto hide-scrollbar">
-            <div className="max-w-4xl mx-auto w-full pt-2 md:pt-8">
+          <div className="flex-1 px-6 md:px-10 pb-24 md:pb-10 overflow-y-auto hide-scrollbar relative z-20">
+            <div className="max-w-4xl mx-auto w-full pt-2 md:pt-8 bg-[#f4f6f9] min-h-full">
               
               <div className="hidden md:block mb-8">
-                <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Bulk Stock Request</h2>
+                <h2 className="text-3xl font-bold text-[#1e2a52] tracking-tight">Bulk Stock Request</h2>
                 <p className="text-slate-500 text-sm mt-1 font-medium">Request new stock for your market</p>
               </div>
 
@@ -213,38 +218,41 @@ export default function StockRequest() {
                     <CheckCircle2 size={20} />
                   </div>
                   <div>
-                    <h4 className="text-slate-900 font-bold text-sm">Request Sent Successfully!</h4>
+                    <h4 className="text-[#1e2a52] font-bold text-sm">Request Sent Successfully!</h4>
                     <p className="text-slate-500 text-xs mt-0.5 font-medium">RSM and Warehouse team have been notified.</p>
                   </div>
                 </div>
               )}
 
               {/* Request Form Card */}
-              <div className="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 mb-6">
-                <div className="space-y-5">
+              <div className="bg-white rounded-3xl border-none shadow-[0_4px_20px_rgba(0,0,0,0.03)] p-6 md:p-8 mb-6 mt-4">
+                <div className="space-y-6">
                   
                   {/* Market Field (Disabled) */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Market</label>
-                    <input 
-                      type="text" 
-                      value={market || 'Loading...'} 
-                      disabled 
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-4 text-sm font-bold text-slate-500 cursor-not-allowed"
-                    />
+                    <label className="block text-xs font-bold text-[#1e2a52] uppercase tracking-wider mb-2">Market Target</label>
+                    <div className="relative">
+                       <input 
+                         type="text" 
+                         value={market || 'Loading...'} 
+                         disabled 
+                         className="w-full bg-[#f8fafc] border border-slate-100 rounded-2xl py-4 px-4 pl-11 text-sm font-bold text-slate-400 cursor-not-allowed outline-none"
+                       />
+                       <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-300">location_on</span>
+                    </div>
                   </div>
 
                   {/* Item Selection */}
                   <div className="flex flex-col md:flex-row gap-4">
                     <div className="flex-1">
-                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Product (Sub-brand)</label>
+                      <label className="block text-xs font-bold text-[#1e2a52] uppercase tracking-wider mb-2">Product Selection</label>
                       <select 
                         value={selectedProductId}
                         onChange={(e) => setSelectedProductId(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-4 text-sm font-medium text-slate-900 focus:ring-2 focus:ring-slate-200 focus:border-slate-300 focus:bg-white outline-none transition-all appearance-none"
-                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 1rem center', backgroundSize: '1.2em' }}
+                        className="w-full bg-white border border-slate-200 rounded-2xl py-4 px-4 text-sm font-medium text-[#1e2a52] focus:ring-2 focus:ring-[#2b6bed] focus:border-[#2b6bed] outline-none transition-all appearance-none cursor-pointer shadow-sm hover:border-[#2b6bed]/50"
+                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%231e2a52'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 1rem center', backgroundSize: '1.2em' }}
                       >
-                        <option value="" disabled>Select a product...</option>
+                        <option value="" disabled>Select a product line...</option>
                         {products.map(p => (
                           <option key={p.id} value={p.id}>{p.sub_brand} ({p.main_brand})</option>
                         ))}
@@ -252,14 +260,14 @@ export default function StockRequest() {
                     </div>
                     
                     <div className="w-full md:w-32">
-                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Qty</label>
+                      <label className="block text-xs font-bold text-[#1e2a52] uppercase tracking-wider mb-2">Units</label>
                       <input 
                         type="number" 
                         min="1"
                         value={quantity}
                         onChange={(e) => setQuantity(e.target.value)}
                         placeholder="0"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-4 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-slate-200 focus:border-slate-300 focus:bg-white outline-none transition-all"
+                        className="w-full bg-white border border-slate-200 rounded-2xl py-4 px-4 text-center text-sm font-bold text-[#1e2a52] focus:ring-2 focus:ring-[#2b6bed] focus:border-[#2b6bed] outline-none transition-all shadow-sm hover:border-[#2b6bed]/50"
                       />
                     </div>
                   </div>
@@ -267,32 +275,32 @@ export default function StockRequest() {
                   <button 
                     onClick={handleAddItem}
                     disabled={!selectedProductId || !quantity || parseInt(quantity) <= 0}
-                    className="w-full py-4 bg-slate-100 text-slate-900 rounded-full font-bold text-sm hover:bg-slate-200 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="w-full py-4 bg-[#eef4ff] text-[#2b6bed] rounded-2xl font-bold text-sm hover:bg-[#d8e6ff] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border border-[#2b6bed]/10"
                   >
-                    <Plus size={18} /> Add to Request List
+                    <Plus size={18} strokeWidth={2.5} /> Append to Request
                   </button>
                 </div>
               </div>
 
               {/* Request List */}
               {requestItems.length > 0 && (
-                <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden mb-6 animate-in fade-in slide-in-from-bottom-4">
-                  <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-900 text-sm">Items to Request</h3>
-                    <span className="bg-slate-100 text-slate-800 text-xs font-bold px-3 py-1.5 rounded-full">{requestItems.length} items</span>
+                <div className="bg-white rounded-3xl border-none shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-hidden mb-6 animate-in fade-in slide-in-from-bottom-4">
+                  <div className="px-6 py-5 border-b border-slate-50 flex justify-between items-center bg-[#f8fafc]">
+                    <h3 className="font-bold text-[#1e2a52] text-sm tracking-wide">Pending Manifest</h3>
+                    <span className="bg-white border border-slate-100 text-[#2b6bed] text-xs font-bold px-3 py-1.5 rounded-full shadow-sm">{requestItems.length} lines</span>
                   </div>
-                  <div className="divide-y divide-slate-100">
+                  <div className="divide-y divide-slate-50">
                     {requestItems.map(item => (
-                      <div key={item.id} className="p-5 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                      <div key={item.id} className="p-5 flex items-center justify-between hover:bg-slate-50 transition-colors group">
                         <div>
-                          <h4 className="font-bold text-slate-900 text-sm">{item.product.sub_brand}</h4>
-                          <p className="text-xs text-slate-500 font-medium">{item.product.main_brand}</p>
+                          <h4 className="font-bold text-[#1e2a52] text-sm leading-tight mb-0.5">{item.product.sub_brand}</h4>
+                          <p className="text-xs text-slate-400 font-medium">{item.product.main_brand}</p>
                         </div>
                         <div className="flex items-center gap-4">
-                          <span className="font-bold text-slate-900 bg-slate-100 px-4 py-2 rounded-full">{item.quantity}</span>
+                          <span className="font-black text-lg text-[#2b6bed] bg-[#eef4ff] px-4 py-1.5 rounded-xl border border-[#2b6bed]/10">{item.quantity}</span>
                           <button 
                             onClick={() => handleRemoveItem(item.id)}
-                            className="w-10 h-10 flex items-center justify-center rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                            className="w-10 h-10 flex items-center justify-center rounded-full text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors opacity-100 md:opacity-0 group-hover:opacity-100"
                           >
                             <Trash2 size={18} />
                           </button>
@@ -300,18 +308,18 @@ export default function StockRequest() {
                       </div>
                     ))}
                   </div>
-                  <div className="p-6 border-t border-slate-100">
+                  <div className="p-6 border-t border-slate-50">
                     <button 
                       onClick={handleSubmit}
                       disabled={isSubmitting}
-                      className="w-full py-4 bg-slate-900 text-white rounded-full font-bold text-sm active:scale-[0.98] transition-all disabled:opacity-70 flex items-center justify-center gap-2 hover:bg-slate-800"
+                      className="w-full py-4 bg-[#2b6bed] text-white rounded-2xl font-bold text-sm active:scale-[0.98] transition-all disabled:opacity-70 flex items-center justify-center gap-2 hover:bg-blue-700 shadow-[0_8px_20px_rgba(43,107,237,0.25)]"
                     >
                       {isSubmitting ? (
                         <RefreshCw size={18} className="animate-spin" />
                       ) : (
                         <Send size={18} />
                       )}
-                      {isSubmitting ? 'Sending Request...' : 'Send Request'}
+                      {isSubmitting ? 'Transmitting...' : 'Dispatch Request'}
                     </button>
                   </div>
                 </div>
@@ -320,30 +328,25 @@ export default function StockRequest() {
             </div>
           </div>
 
-          {/* Fixed Bottom Navigation Bar (Mobile Only) */}
-          <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 pb-safe">
-            <nav className="flex justify-around items-center px-6 py-3">
+          {/* Floating Pill Bottom Navigation matching Dash */}
+          <div className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-[320px]">
+            <nav className="flex justify-around items-center px-2 py-3 bg-white rounded-full shadow-[0_10px_40px_rgba(43,107,237,0.15)] mx-auto">
               <button 
                 onClick={() => navigate('/tm-dashboard')}
-                className={`flex flex-col items-center justify-center gap-1 transition-all duration-300 text-slate-400 hover:text-slate-900`}
+                className={`p-3 rounded-full transition-all duration-300 text-slate-300 hover:text-slate-500`}
               >
-                <Home size={24} strokeWidth={2} />
-                <span className="text-[10px] font-medium">Home</span>
+                <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>home</span>
               </button>
               
-              <button 
-                className={`flex flex-col items-center justify-center gap-1 transition-all duration-300 text-slate-900`}
-              >
-                <PackagePlus size={24} strokeWidth={2.5} />
-                <span className="text-[10px] font-medium">Request</span>
+              <button className={`p-3 rounded-full transition-all duration-300 text-[#2b6bed] bg-[#eef4ff] scale-110`}>
+                <span className="material-symbols-outlined" style={{ fontSize: '22px', fontVariationSettings: "'FILL' 1" }}>add_box</span>
               </button>
               
               <button 
                 onClick={() => navigate('/tm-dashboard')}
-                className={`flex flex-col items-center justify-center gap-1 transition-all duration-300 text-slate-400 hover:text-slate-900`}
+                className={`p-3 rounded-full transition-all duration-300 text-slate-300 hover:text-slate-500`}
               >
-                <FileText size={24} strokeWidth={2} />
-                <span className="text-[10px] font-medium">Outlets</span>
+                <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>fact_check</span>
               </button>
             </nav>
           </div>

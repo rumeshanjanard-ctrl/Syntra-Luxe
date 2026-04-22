@@ -268,84 +268,52 @@ export default function TmDashboard() {
         {/* Main Content Area */}
         <main className="flex-1 h-full flex flex-col relative overflow-hidden w-full max-w-[420px] md:max-w-none mx-auto">
           
-          {/* Mobile Top Header */}
-          <header className="md:hidden pt-8 pb-2 px-4 flex items-center justify-between z-10 shrink-0 bg-white">
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-black tracking-tight text-slate-900 uppercase">Syntra Luxe</h1>
+          {/* Mobile Top Header - Dark Blue Theme */}
+          <header className="md:hidden pt-8 pb-12 px-6 flex items-center justify-between z-10 shrink-0 bg-[#1e2a52] text-white rounded-b-[2rem] relative">
+            {/* Subtle background pattern/overlay for the header */}
+            <div className="absolute inset-0 overflow-hidden rounded-b-[2rem] pointer-events-none opacity-10">
+               <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                 <path d="M0,0 L100,100 M100,0 L0,100" stroke="currentColor" strokeWidth="2" />
+               </svg>
+            </div>
+            <div className="flex items-center gap-2 relative z-10">
+              <h1 className="text-xl font-bold tracking-tight text-white">Syntra Luxe</h1>
             </div>
             <button 
               onClick={handleLogout}
-              className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 transition-colors border border-slate-100"
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors border border-white/20 relative z-10"
             >
-              <LogOut size={14} />
+              <LogOut size={16} />
             </button>
           </header>
 
           {/* Content Canvas */}
-          <div className="flex-1 bg-white overflow-hidden flex flex-col relative">
-            <div className="flex-1 px-5 md:px-10 pb-28 md:pb-10 overflow-y-auto hide-scrollbar pt-1 md:pt-10">
+          <div className="flex-1 bg-transparent overflow-hidden flex flex-col relative -mt-6">
+            <div className="flex-1 px-5 md:px-10 pb-28 md:pb-10 overflow-y-auto hide-scrollbar pt-6 bg-[#f4f6f9] rounded-t-[2rem] shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
               <div className="max-w-4xl mx-auto w-full">
                 
                 {activeTab === 'home' && (
                   <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
                     
-                    <div className="mb-3 flex justify-between items-center text-slate-900">
-                      <div>
-                        <h2 className="text-base font-black tracking-tight uppercase leading-none mb-1">Overview</h2>
-                        <p className="text-[9px] items-center gap-1 font-bold text-slate-400 uppercase tracking-widest flex">
-                          <Clock size={8} /> {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                        </p>
-                      </div>
-                      <div className="w-7 h-7 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 relative border border-slate-100">
-                        <Bell size={14} />
-                        <span className="absolute top-1 right-1 w-1 h-1 bg-green-500 rounded-full border border-white"></span>
-                      </div>
+                    {/* Header Text mapping "Where do you want to travel?" */}
+                    <div className="mb-6 flex justify-between items-end mt-2">
+                       <h2 className="text-[26px] font-bold text-[#1e2a52] leading-tight max-w-[70%]">
+                         Your Daily<br/>Dashboard
+                       </h2>
+                       <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-400 border border-slate-100 shadow-sm relative shrink-0">
+                          <Bell size={18} />
+                          <span className="absolute top-2 right-2 w-2 h-2 bg-[#ff6b6b] rounded-full border-2 border-white"></span>
+                       </div>
                     </div>
 
-                    {/* Replacement Sleek Progress Component */}
-                    <div className="mb-5 bg-slate-900 rounded-[1.5rem] p-4 shadow-xl shadow-slate-200 relative overflow-hidden group">
-                      <div className="absolute right-0 top-0 w-16 h-16 bg-white/5 rounded-full blur-xl -mr-8 -mt-8"></div>
-                      <div className="relative z-10">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex flex-col">
-                            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 leading-none mb-1">Efficiency</span>
-                            <span className="text-lg font-black text-white leading-none">{progressPercentage}%</span>
-                          </div>
-                          <div className="w-8 h-8 rounded-full border-2 border-white/10 flex items-center justify-center relative">
-                            <svg className="w-full h-full -rotate-90">
-                              <circle cx="16" cy="16" r="13" fill="transparent" stroke="rgba(255,255,255,0.1)" strokeWidth="2" />
-                              <circle cx="16" cy="16" r="13" fill="transparent" stroke="white" strokeWidth="2" strokeDasharray={82} strokeDashoffset={82 - (82 * progressPercentage / 100)} strokeLinecap="round" />
-                            </svg>
-                            <CheckCircle2 size={12} className="absolute text-white" />
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="flex flex-col">
-                            <span className="text-[7.5px] font-bold text-slate-500 uppercase tracking-widest leading-none mb-0.5">Done</span>
-                            <span className="text-xs font-bold text-white leading-none">{completedCount}</span>
-                          </div>
-                          <div className="w-px h-4 bg-white/10"></div>
-                          <div className="flex flex-col">
-                            <span className="text-[7.5px] font-bold text-slate-500 uppercase tracking-widest leading-none mb-0.5">Left</span>
-                            <span className="text-xs font-bold text-white leading-none">{outlets.length - completedCount}</span>
-                          </div>
-                          <div className="ml-auto">
-                             <div className="px-1.5 py-0.5 rounded-full bg-white/10 text-white text-[7.5px] font-bold uppercase tracking-wider backdrop-blur-sm">
-                               {progressPercentage === 100 ? 'Target Met' : 'Active'}
-                             </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Universal Search - Compact */}
-                    <div className="mb-6 relative z-20">
+                    {/* Universal Search - Pill matching image */}
+                    <div className="mb-8 relative z-20">
                       <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-                        <Search size={16} className="text-slate-400" />
+                        <Search size={18} className="text-slate-400" />
                       </div>
                       <input 
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3 pl-11 pr-4 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-slate-100 focus:bg-white transition-all outline-none shadow-sm" 
-                        placeholder="Quick outlet search..." 
+                        className="w-full bg-white border-none rounded-full py-3.5 pl-12 pr-4 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-[#2b6bed] transition-all outline-none shadow-[0_4px_20px_rgba(0,0,0,0.03)]" 
+                        placeholder="Select branch..." 
                         type="text" 
                         value={homeSearchQuery}
                         onChange={(e) => setHomeSearchQuery(e.target.value)}
@@ -358,14 +326,14 @@ export default function TmDashboard() {
                             filteredHomeOutlets.map(outlet => (
                               <div 
                                 key={outlet.id}
-                                className="p-3 hover:bg-slate-50 cursor-pointer flex justify-between items-center transition-colors group"
+                                className="p-4 hover:bg-slate-50 cursor-pointer flex justify-between items-center transition-colors group"
                                 onClick={() => navigate('/sku-entry', { state: { outlet } })}
                               >
                                 <div>
-                                  <h4 className="font-bold text-slate-900 text-xs group-hover:text-fuchsia-600 transition-colors">{outlet.outlet_name}</h4>
-                                  <p className="text-[10px] text-slate-400 font-medium tracking-wide">{outlet.im_code}</p>
+                                  <h4 className="font-bold text-[#1e2a52] text-sm group-hover:text-[#2b6bed] transition-colors">{outlet.outlet_name}</h4>
+                                  <p className="text-[11px] text-slate-400 font-medium tracking-wide mt-0.5">{outlet.im_code}</p>
                                 </div>
-                                <ChevronRight size={14} className="text-slate-300" />
+                                <ChevronRight size={16} className="text-slate-300" />
                               </div>
                             ))
                           )}
@@ -373,18 +341,21 @@ export default function TmDashboard() {
                       )}
                     </div>
 
-                    {/* Quick Action Buttons - Ultra Compact */}
-                    <div className="mb-5">
-                      <div className="grid grid-cols-3 gap-2">
+                    {/* Quick Action Buttons - Circular "Included" Row */}
+                    <div className="mb-8">
+                      <h3 className="text-lg font-bold text-[#1e2a52] mb-1">Actions</h3>
+                      <p className="text-[11px] text-slate-400 mb-4 font-medium">For more details press on the icons.</p>
+                      <div className="flex justify-between items-start px-2">
                         <button 
                           onClick={() => navigate('/stock-request')}
-                          className="bg-white rounded-[1.25rem] p-2.5 border border-slate-100 flex flex-col items-center justify-center gap-1 hover:bg-slate-50 transition-all shadow-sm"
+                          className="flex flex-col items-center gap-2 group"
                         >
-                          <div className="w-7 h-7 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
-                            <PackagePlus size={14} strokeWidth={2.5} />
+                          <div className="w-14 h-14 rounded-full border-2 border-[#2b6bed]/20 bg-white flex items-center justify-center text-[#2b6bed] group-active:scale-95 transition-transform shadow-sm">
+                            <PackagePlus size={24} strokeWidth={2} />
                           </div>
-                          <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">Request</span>
+                          <span className="text-[11px] font-semibold text-slate-700">Request</span>
                         </button>
+                        
                         <button 
                           onClick={() => {
                             const recentSection = document.getElementById('recent-entries-section');
@@ -392,59 +363,102 @@ export default function TmDashboard() {
                               recentSection.scrollIntoView({ behavior: 'smooth' });
                             }
                           }}
-                          className="bg-white rounded-[1.25rem] p-2.5 border border-slate-100 flex flex-col items-center justify-center gap-1 hover:bg-slate-50 transition-all shadow-sm"
+                          className="flex flex-col items-center gap-2 group"
                         >
-                          <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
-                            <History size={14} strokeWidth={2.5} />
+                          <div className="w-14 h-14 rounded-full border-2 border-[#2b6bed]/20 bg-[#2b6bed] flex items-center justify-center text-white group-active:scale-95 transition-transform shadow-md shadow-[#2b6bed]/20">
+                            <History size={24} strokeWidth={2} />
                           </div>
-                          <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">History</span>
+                          <span className="text-[11px] font-semibold text-slate-700">History</span>
                         </button>
+
                         <button 
                           onClick={() => setActiveTab('entries')}
-                          className="bg-white rounded-[1.25rem] p-2.5 border border-slate-100 flex flex-col items-center justify-center gap-1 hover:bg-slate-50 transition-all shadow-sm"
+                          className="flex flex-col items-center gap-2 group"
                         >
-                          <div className="w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
-                            <List size={14} strokeWidth={2.5} />
+                          <div className="w-14 h-14 rounded-full border-2 border-[#2b6bed]/20 bg-white flex items-center justify-center text-[#2b6bed] group-active:scale-95 transition-transform shadow-sm">
+                            <List size={24} strokeWidth={2} />
                           </div>
-                          <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">Outlets</span>
+                          <span className="text-[11px] font-semibold text-slate-700">Outlets</span>
+                        </button>
+
+                        <button 
+                           onClick={() => setActiveTab('sync')}
+                           className="flex flex-col items-center gap-2 group"
+                        >
+                          <div className="w-14 h-14 rounded-full border-2 border-[#2b6bed]/20 bg-white flex items-center justify-center text-[#2b6bed] group-active:scale-95 transition-transform shadow-sm">
+                            <RefreshCw size={24} strokeWidth={2} />
+                          </div>
+                          <span className="text-[11px] font-semibold text-slate-700">Sync</span>
                         </button>
                       </div>
                     </div>
 
-                    {/* Recent Entries Section - Compact */}
-                    <section id="recent-entries-section" className="pb-4">
-                      <div className="flex items-center justify-between mb-3 px-1">
-                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-[0.15em]">Recently Handled</h3>
-                        <button onClick={() => setActiveTab('entries')} className="text-[10px] font-bold text-indigo-600 flex items-center gap-1 hover:underline uppercase tracking-tighter">
-                          View Log <ChevronRight size={12} />
-                        </button>
+                    {/* Progress Component matching "Best Deals" Card Layout */}
+                    <div className="mb-6">
+                      <div className="flex justify-between items-center mb-1">
+                        <h3 className="text-lg font-bold text-[#1e2a52]">Rating & Reviews</h3>
+                        <span className="text-orange-400 font-bold flex items-center gap-1 text-sm"><Search size={14} className="opacity-0"/>★ 4.6</span>
                       </div>
+                      <p className="text-[11px] text-slate-400 mb-4 font-medium flex justify-between">
+                        <span>Sorted by recent performance</span>
+                        <span>{outlets.length} Outlets</span>
+                      </p>
+                      
+                      <div className="bg-white rounded-2xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border-none relative overflow-hidden flex items-center gap-4">
+                        <div className="relative shrink-0">
+                           <svg className="w-16 h-16 -rotate-90">
+                              <circle cx="32" cy="32" r="28" fill="transparent" stroke="#f1f5f9" strokeWidth="6" />
+                              <circle cx="32" cy="32" r="28" fill="transparent" stroke="#ffb11a" strokeWidth="6" strokeDasharray={176} strokeDashoffset={176 - (176 * progressPercentage / 100)} strokeLinecap="round" />
+                           </svg>
+                           <div className="absolute inset-0 flex flex-col items-center justify-center">
+                              <span className="text-xs font-bold text-[#1e2a52]">{progressPercentage}%</span>
+                           </div>
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-bold text-[#1e2a52] text-sm mb-1">{completedCount} Completed</h4>
+                          <div className="flex items-center gap-1">
+                            <div className="flex text-[#ffb11a]">
+                              <span className="text-[10px]">★</span><span className="text-[10px]">★</span><span className="text-[10px]">★</span><span className="text-[10px]">★</span><span className="text-[10px] text-slate-200">★</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400">{progressPercentage === 100 ? 'Target Met' : 'Active'}</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-relaxed mt-2.5">
+                            {completedCount} tasks completed out of {outlets.length} total assigned outlets today. Maintain current efficiency.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Recent Entries Section - "Gallery" style */}
+                    <section id="recent-entries-section" className="pb-4">
+                      <h3 className="text-lg font-bold text-[#1e2a52] mb-1">Recent History</h3>
+                      <p className="text-[11px] text-slate-400 mb-4 font-medium flex justify-between">
+                        <span>Sorted by recent updates</span>
+                      </p>
                       
                       {recentOutlets.length === 0 ? (
-                        <div className="py-8 text-center text-[11px] font-bold text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200 uppercase tracking-widest">
-                          Waiting for first entry
+                        <div className="py-12 flex flex-col items-center justify-center text-center bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border-none">
+                          <History size={32} className="text-slate-200 mb-3" />
+                          <span className="text-sm font-semibold text-slate-400">No recent entries</span>
                         </div>
                       ) : (
-                        <div className="space-y-2">
+                        <div className="flex gap-4 overflow-x-auto pb-4 hide-scrollbar -mx-5 px-5 md:mx-0 md:px-0">
                           {recentOutlets.map((outlet) => (
                             <div 
                               key={outlet.id}
-                              className="bg-white rounded-2xl p-3 border border-slate-100 flex justify-between items-center transition-all active:scale-[0.98] cursor-pointer hover:bg-slate-50 group hover:shadow-sm"
+                              className="bg-white rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col justify-between transition-all active:scale-[0.98] cursor-pointer shrink-0 w-40"
                               onClick={() => handleViewDetails(outlet)}
                             >
-                              <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 group-hover:scale-105 transition-transform border border-emerald-100">
-                                  <CheckCircle2 size={18} strokeWidth={2.5} />
-                                </div>
-                                <div className="overflow-hidden max-w-[140px] sm:max-w-none">
-                                  <h4 className="font-black text-slate-900 text-[11px] mb-0.5 truncate uppercase tracking-tight">{outlet.outlet_name}</h4>
-                                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none">{outlet.im_code}</p>
-                                </div>
+                              <div className="mb-6 flex justify-between items-start">
+                                <h4 className="font-bold text-[#1e2a52] text-sm leading-tight line-clamp-2">{outlet.outlet_name}</h4>
                               </div>
-                              <div className="text-right flex flex-col items-end">
-                                <div className="text-[9px] font-black text-emerald-600 mb-0.5 uppercase flex items-center gap-1">
-                                  <div className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"></div>
-                                  Verified
+                              
+                              <div className="flex justify-between items-end gap-2">
+                                <div className="text-[10px] font-semibold text-slate-400 truncate">
+                                  {outlet.im_code}
+                                </div>
+                                <div className="px-2.5 py-1 rounded-full bg-[#2b6bed] text-white text-[10px] font-bold">
+                                  View
                                 </div>
                               </div>
                             </div>
@@ -457,21 +471,23 @@ export default function TmDashboard() {
 
                 {activeTab === 'entries' && (
                   <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                    <div className="mb-4 flex justify-between items-center">
-                      <h2 className="text-lg font-black text-slate-900 tracking-tight uppercase">Outlet Catalog</h2>
-                      <div className="bg-slate-900 text-white px-2 py-0.5 rounded-full text-[9px] font-bold tracking-widest uppercase shadow-lg shadow-slate-100">
-                        {filteredOutlets.length} Units
-                      </div>
+                    <div className="mb-6 flex justify-between items-end mt-2">
+                       <h2 className="text-[26px] font-bold text-[#1e2a52] leading-tight max-w-[70%]">
+                         Outlet<br/>Catalog
+                       </h2>
+                       <div className="bg-[#eef4ff] text-[#2b6bed] px-3 py-1.5 rounded-full text-xs font-bold shadow-sm border border-[#2b6bed]/10">
+                         {filteredOutlets.length} Units
+                       </div>
                     </div>
 
-                    {/* Search Bar - Compact */}
-                    <section className="mb-4">
+                    {/* Search Bar - Pill Style */}
+                    <section className="mb-6">
                       <div className="relative">
                         <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-                          <Search size={16} className="text-slate-400" />
+                          <Search size={18} className="text-slate-400" />
                         </div>
                         <input 
-                          className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3 pl-11 pr-4 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-slate-100 focus:bg-white transition-all outline-none" 
+                          className="w-full bg-white border-none rounded-full py-3.5 pl-12 pr-4 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-[#2b6bed] transition-all outline-none shadow-[0_4px_20px_rgba(0,0,0,0.03)]" 
                           placeholder="Search identifier..." 
                           type="text" 
                           value={searchQuery}
@@ -480,16 +496,18 @@ export default function TmDashboard() {
                       </div>
                     </section>
 
-                    {/* Outlet List Section - Compact */}
+                    {/* Outlet List Section - Sleek Cards */}
                     <section>
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {loading ? (
-                          <div className="py-12 text-center text-[11px] font-bold text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200 uppercase tracking-widest">
-                            Scanning Directory...
+                          <div className="py-12 flex flex-col items-center justify-center text-center bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border-none">
+                            <RefreshCw size={32} className="text-slate-200 mb-3 animate-spin" />
+                            <span className="text-sm font-semibold text-slate-400">Scanning Directory...</span>
                           </div>
                         ) : filteredOutlets.length === 0 ? (
-                          <div className="py-12 text-center text-[11px] font-bold text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200 uppercase tracking-widest">
-                            No Matches Found
+                          <div className="py-12 flex flex-col items-center justify-center text-center bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border-none">
+                            <Search size={32} className="text-slate-200 mb-3" />
+                            <span className="text-sm font-semibold text-slate-400">No Matches Found</span>
                           </div>
                         ) : (
                           filteredOutlets.map((outlet) => {
@@ -497,20 +515,23 @@ export default function TmDashboard() {
                             return (
                               <div 
                                 key={outlet.id}
-                                className="bg-white rounded-2xl p-3 border border-slate-100 flex flex-col gap-2 transition-all active:scale-[0.98] cursor-pointer hover:bg-slate-50 hover:shadow-sm"
+                                className="bg-white rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border-none flex flex-col gap-2 transition-all active:scale-[0.98] cursor-pointer hover:bg-slate-50 relative overflow-hidden"
                                 onClick={() => navigate('/sku-entry', { state: { outlet } })}
                               >
-                                <div className="flex justify-between items-center">
-                                  <div className="flex items-center gap-3">
-                                    <div className={`w-9 h-9 rounded-full flex items-center justify-center ${isCompleted ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-orange-50 text-orange-500 border border-orange-100'}`}>
-                                      {isCompleted ? <CheckCircle2 size={18} strokeWidth={2.5} /> : <Clock size={18} strokeWidth={2.5} />}
+                                {isCompleted && <div className="absolute top-0 left-0 w-1 h-full bg-[#10b981]"></div>}
+                                <div className="flex justify-between items-center pl-1">
+                                  <div className="flex items-center gap-4">
+                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 ${isCompleted ? 'bg-[#10b981]/10 text-[#10b981] border-[#10b981]/20' : 'bg-[#ffb11a]/10 text-[#ffb11a] border-[#ffb11a]/20'}`}>
+                                      {isCompleted ? <CheckCircle2 size={24} strokeWidth={2} /> : <Clock size={24} strokeWidth={2} />}
                                     </div>
                                     <div>
-                                      <h4 className="font-black text-slate-900 text-[11px] mb-0.5 uppercase tracking-tight">{outlet.outlet_name}</h4>
-                                      <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{outlet.im_code}</p>
+                                      <h4 className="font-bold text-[#1e2a52] text-sm mb-0.5 leading-tight">{outlet.outlet_name}</h4>
+                                      <p className="text-[11px] text-slate-400 font-semibold">{outlet.im_code}</p>
                                     </div>
                                   </div>
-                                  <ChevronRight size={14} className="text-slate-300" />
+                                  <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
+                                    <ChevronRight size={16} />
+                                  </div>
                                 </div>
                               </div>
                             );
@@ -536,76 +557,86 @@ export default function TmDashboard() {
             </div>
           </div>
 
-          {/* Fixed Bottom Navigation Bar (Mobile Only) - Ultra Compact */}
-          <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-t border-slate-100 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
-            <nav className="flex justify-around items-center px-4 py-3">
+          {/* Fixed Bottom Navigation Bar - Floating Pill Style */}
+          <div className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-[320px]">
+            <nav className="flex justify-around items-center px-2 py-3 bg-white rounded-full shadow-[0_10px_40px_rgba(43,107,237,0.15)] mx-auto">
               <button 
                 onClick={() => setActiveTab('home')}
-                className={`flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'home' ? 'text-slate-900' : 'text-slate-300 hover:text-slate-500'}`}
+                className={`p-3 rounded-full transition-all duration-300 ${activeTab === 'home' ? 'text-[#2b6bed] bg-[#eef4ff] scale-110' : 'text-slate-300 hover:text-slate-500'}`}
               >
-                <div className={`p-2 rounded-xl transition-all ${activeTab === 'home' ? 'bg-slate-100' : ''}`}>
-                  <Home size={20} strokeWidth={activeTab === 'home' ? 3 : 2} />
-                </div>
-                <span className="text-[8px] font-black uppercase tracking-tighter">Home</span>
+                <Home size={22} strokeWidth={2.5} />
+              </button>
+              
+              <button 
+                onClick={() => navigate('/stock-request')}
+                className={`p-3 rounded-full transition-all duration-300 text-slate-300 hover:text-slate-500`}
+              >
+                <PackagePlus size={22} strokeWidth={2.5} />
               </button>
               
               <button 
                 onClick={() => setActiveTab('entries')}
-                className={`flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'entries' ? 'text-slate-900' : 'text-slate-300 hover:text-slate-500'}`}
+                className={`p-3 rounded-full transition-all duration-300 ${activeTab === 'entries' ? 'text-[#2b6bed] bg-[#eef4ff] scale-110' : 'text-slate-300 hover:text-slate-500'}`}
               >
-                <div className={`p-2 rounded-xl transition-all ${activeTab === 'entries' ? 'bg-slate-100' : ''}`}>
-                  <List size={20} strokeWidth={activeTab === 'entries' ? 3 : 2} />
-                </div>
-                <span className="text-[8px] font-black uppercase tracking-tighter">Outlets</span>
+                <List size={22} strokeWidth={2.5} />
               </button>
               
               <button 
-                onClick={() => setActiveTab('sync')}
-                className={`flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'sync' ? 'text-slate-900' : 'text-slate-300 hover:text-slate-500'}`}
+                 onClick={() => {
+                   document.getElementById('recent-entries-section')?.scrollIntoView({ behavior: 'smooth' });
+                   setActiveTab('home');
+                 }}
+                 className="p-3 rounded-full transition-all duration-300 text-slate-300 hover:text-slate-500"
               >
-                <div className={`p-2 rounded-xl transition-all ${activeTab === 'sync' ? 'bg-slate-100' : ''}`}>
-                  <RefreshCw size={20} strokeWidth={activeTab === 'sync' ? 3 : 2} />
-                </div>
-                <span className="text-[8px] font-black uppercase tracking-tighter">Sync</span>
+                <History size={22} strokeWidth={2.5} />
               </button>
             </nav>
           </div>
 
           {/* View Details Modal / Bottom Sheet - Refined */}
           {selectedRecentOutlet && (
-            <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-              <div className="bg-white w-full max-w-[420px] md:max-w-lg rounded-t-[2.5rem] md:rounded-3xl md:mb-10 shadow-2xl flex flex-col max-h-[80vh] animate-in slide-in-from-bottom-full md:zoom-in-95 duration-400 ease-out">
-                <div className="flex justify-center pt-3 pb-1 md:hidden">
-                  <div className="w-10 h-1 bg-slate-100 rounded-full"></div>
+            <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+              <div className="bg-white w-full max-w-[420px] md:max-w-lg rounded-t-[2.5rem] md:rounded-[2.5rem] md:mb-0 shadow-2xl flex flex-col max-h-[85vh] animate-in slide-in-from-bottom-full md:zoom-in-95 duration-400 ease-out border border-slate-100">
+                <div className="flex justify-center pt-4 pb-2 md:hidden">
+                  <div className="w-12 h-1.5 bg-slate-200 rounded-full"></div>
                 </div>
-                <div className="px-6 pb-3 pt-3 md:pt-8 flex justify-between items-center">
+                <div className="px-6 pb-4 pt-2 md:pt-8 flex justify-between items-start">
                   <div>
-                    <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">{selectedRecentOutlet.outlet_name}</h3>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">{selectedRecentOutlet.im_code}</p>
+                    <h3 className="text-xl font-bold text-[#1e2a52] leading-tight mb-1">{selectedRecentOutlet.outlet_name}</h3>
+                    <div className="inline-flex items-center px-2.5 py-1 rounded-full bg-[#f8fafc] border border-slate-100">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{selectedRecentOutlet.im_code}</span>
+                    </div>
                   </div>
-                  <button onClick={() => setSelectedRecentOutlet(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 transition-colors">
-                    <X size={16} />
+                  <button onClick={() => setSelectedRecentOutlet(null)} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 transition-colors shrink-0">
+                    <X size={18} />
                   </button>
                 </div>
+                
+                <div className="px-6 pb-2">
+                   <h4 className="text-sm font-bold text-[#1e2a52] mb-1">Captured Analytics</h4>
+                   <p className="text-[11px] text-slate-400 font-medium">Recordings from the latest physical audit.</p>
+                </div>
+
                 <div className="flex-1 overflow-y-auto px-6 pb-4 hide-scrollbar">
                   {loadingDetails ? (
-                    <div className="text-center py-10">
-                      <div className="w-6 h-6 border-4 border-slate-100 border-t-slate-900 rounded-full animate-spin mx-auto mb-2"></div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Loading Analytics...</p>
+                    <div className="text-center py-12 flex flex-col items-center">
+                      <RefreshCw size={28} className="text-[#2b6bed] animate-spin mb-3" />
+                      <p className="text-xs font-semibold text-slate-400">Loading Analytics...</p>
                     </div>
                   ) : recentStockDetails.length === 0 ? (
-                    <div className="text-center py-10 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                      Zero Data Captured
+                    <div className="text-center py-12 flex flex-col items-center bg-[#f8fafc] rounded-2xl border border-slate-100 mt-2">
+                       <Search size={28} className="text-slate-300 mb-3" />
+                      <div className="text-xs font-semibold text-slate-400">Zero Data Captured</div>
                     </div>
                   ) : (
-                    <div className="space-y-1.5 mt-2">
+                    <div className="space-y-2 mt-4">
                       {recentStockDetails.map(entry => (
-                        <div key={entry.id} className="flex items-center justify-between p-3 rounded-2xl border border-slate-50 bg-slate-50/50">
+                        <div key={entry.id} className="flex items-center justify-between p-4 rounded-2xl border border-slate-100 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
                           <div>
-                            <div className="font-black text-slate-900 text-[10px] uppercase tracking-tighter leading-none mb-1">{entry.sub_brand}</div>
-                            <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none">{entry.main_brand}</div>
+                            <div className="font-bold text-[#1e2a52] text-sm leading-tight mb-0.5">{entry.sub_brand}</div>
+                            <div className="text-[11px] text-slate-400 font-semibold">{entry.main_brand}</div>
                           </div>
-                          <div className="text-slate-900 font-black text-lg tabular-nums">
+                          <div className="text-[#2b6bed] font-black text-xl tabular-nums bg-[#eef4ff] px-3 py-1 rounded-xl">
                             {entry.stock_count}
                           </div>
                         </div>
@@ -613,14 +644,14 @@ export default function TmDashboard() {
                     </div>
                   )}
                 </div>
-                <div className="p-5 md:rounded-b-3xl">
+                <div className="p-6 md:rounded-b-[2.5rem] bg-white border-t border-slate-50">
                   <button 
                     onClick={() => {
                       navigate('/sku-entry', { state: { outlet: selectedRecentOutlet } });
                     }}
-                    className="w-full py-3 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-slate-800 active:scale-95 transition-all shadow-xl shadow-slate-200"
+                    className="w-full py-4 bg-[#2b6bed] text-white rounded-2xl font-bold text-sm hover:bg-blue-700 active:scale-95 transition-all shadow-[0_8px_20px_rgba(43,107,237,0.25)] flex justify-center items-center gap-2"
                   >
-                    Adjust Analytics
+                    Adjust Analytics <ChevronRight size={16} />
                   </button>
                 </div>
               </div>
