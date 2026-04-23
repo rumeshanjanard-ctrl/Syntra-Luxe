@@ -406,24 +406,28 @@ export default function TmDashboard() {
                           <span className="text-sm font-semibold text-slate-400">No recent entries</span>
                         </div>
                       ) : (
-                        <div className="flex gap-4 overflow-x-auto pb-4 hide-scrollbar -mx-5 px-5 md:mx-0 md:px-0">
+                        <div className="space-y-3 pb-4">
                           {recentOutlets.map((outlet) => (
                             <div 
                               key={outlet.id}
-                              className="bg-white rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col justify-between transition-all active:scale-[0.98] cursor-pointer shrink-0 w-40"
+                              className="bg-white rounded-[1.5rem] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex items-center justify-between transition-all active:scale-[0.98] cursor-pointer border border-slate-50"
                               onClick={() => handleViewDetails(outlet)}
                             >
-                              <div className="mb-6 flex justify-between items-start">
-                                <h4 className="font-bold text-[#1e2a52] text-sm leading-tight line-clamp-2">{outlet.outlet_name}</h4>
+                              <div className="flex items-center gap-4 truncate">
+                                <div className="w-11 h-11 rounded-full bg-[#f8fafc] flex items-center justify-center text-[#2b6bed] border border-slate-50">
+                                  <History size={18} />
+                                </div>
+                                <div className="truncate">
+                                  <h4 className="font-bold text-[#1e2a52] text-sm leading-tight truncate">{outlet.outlet_name}</h4>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-[10px] font-bold text-[#2b6bed] uppercase tracking-wider">{outlet.im_code}</span>
+                                    <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                                    <span className="text-[10px] font-medium text-slate-400">Recently Updated</span>
+                                  </div>
+                                </div>
                               </div>
-                              
-                              <div className="flex justify-between items-end gap-2">
-                                <div className="text-[10px] font-semibold text-slate-400 truncate">
-                                  {outlet.im_code}
-                                </div>
-                                <div className="px-2.5 py-1 rounded-full bg-[#2b6bed] text-white text-[10px] font-bold">
-                                  View
-                                </div>
+                              <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300">
+                                <ChevronRight size={18} />
                               </div>
                             </div>
                           ))}
@@ -577,7 +581,7 @@ export default function TmDashboard() {
                 </div>
                 
                 <div className="px-6 pb-2">
-                   <h4 className="text-sm font-bold text-[#1e2a52] mb-1">Captured Analytics</h4>
+                   <h4 className="text-sm font-bold text-[#1e2a52] mb-1">Stock Details</h4>
                    <p className="text-[11px] text-slate-400 font-medium">Recordings from the latest physical audit.</p>
                 </div>
 
@@ -585,7 +589,7 @@ export default function TmDashboard() {
                   {loadingDetails ? (
                     <div className="text-center py-12 flex flex-col items-center">
                       <RefreshCw size={28} className="text-[#2b6bed] animate-spin mb-3" />
-                      <p className="text-xs font-semibold text-slate-400">Loading Analytics...</p>
+                      <p className="text-xs font-semibold text-slate-400">Loading Data...</p>
                     </div>
                   ) : recentStockDetails.length === 0 ? (
                     <div className="text-center py-12 flex flex-col items-center bg-[#f8fafc] rounded-2xl border border-slate-100 mt-2">
@@ -611,11 +615,12 @@ export default function TmDashboard() {
                 <div className="p-6 md:rounded-b-[2.5rem] bg-white border-t border-slate-50">
                   <button 
                     onClick={() => {
-                      navigate('/sku-entry', { state: { outlet: selectedRecentOutlet } });
+                      const initialCategory = recentStockDetails.length > 0 && recentStockDetails[0].category === 'Wines' ? 'Wines' : 'Diageo';
+                      navigate('/sku-entry', { state: { outlet: selectedRecentOutlet, initialCategory } });
                     }}
                     className="w-full py-4 bg-[#2b6bed] text-white rounded-2xl font-bold text-sm hover:bg-blue-700 active:scale-95 transition-all shadow-[0_8px_20px_rgba(43,107,237,0.25)] flex justify-center items-center gap-2"
                   >
-                    Adjust Analytics <ChevronRight size={16} />
+                    Edit <ChevronRight size={16} />
                   </button>
                 </div>
               </div>

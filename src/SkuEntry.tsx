@@ -13,7 +13,9 @@ export default function SkuEntry() {
   const [stockData, setStockData] = useState<Record<string, number>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState<'Diageo' | 'Wines'>('Diageo');
+  const [activeCategory, setActiveCategory] = useState<'Diageo' | 'Wines'>(
+    (location.state?.initialCategory as 'Diageo' | 'Wines') || 'Diageo'
+  );
 
   useEffect(() => {
     const fetchProductsAndStock = async () => {
@@ -62,7 +64,23 @@ export default function SkuEntry() {
   const handleStockBlur = async (product: Product) => {
     if (!outlet) return;
     const stockCount = stockData[product.id];
-    if (stockCount === undefined) return;
+    
+    // If stockCount is 0, empty, or undefined, we treat it as an "undo" or "no entry"
+    // to prevent accidental sales calculations if it was a mistake.
+    if (!stockCount || stockCount === 0) {
+      setSavingId(product.id);
+      const { error } = await supabase
+        .from('stock_entries')
+        .delete()
+        .eq('outlet_id', outlet.id)
+        .eq('product_id', product.id);
+      
+      if (error) {
+        console.error("Error deleting stock entry:", error);
+      }
+      setSavingId(null);
+      return;
+    }
 
     setSavingId(product.id);
     const userStr = localStorage.getItem('currentUser');
