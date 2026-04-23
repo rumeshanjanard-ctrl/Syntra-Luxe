@@ -107,6 +107,9 @@ export default function AdminDashboard() {
   });
   const [reportData, setReportData] = useState<StockSheet[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
+  const [reportTM, setReportTM] = useState('All');
+  const [reportMarket, setReportMarket] = useState('All');
+  const [reportCategory, setReportCategory] = useState('All');
 
   // Presence State
   const [onlineUsers, setOnlineUsers] = useState<Record<string, any>>({});
@@ -590,7 +593,7 @@ export default function AdminDashboard() {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `outlet_stock_summary_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `Reports.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -598,8 +601,8 @@ export default function AdminDashboard() {
   };
 
   const exportReportToCSV = () => {
-    const headers = ['IM Code', 'Outlet Name', 'TM Name', 'Market', 'Category', 'Main Brand', 'Sub Brand', 'Previous Stock', 'Current Stock', 'Sales Qty', 'Updated At'];
-    const csvData = reportData.map(entry => {
+    const headers = ['IM Code', 'Outlet Name', 'TM Name', 'Market', 'Category', 'Main Brand', 'Sub Brand', 'Current Stock', 'Updated At'];
+    const csvData = filteredReportData.map(entry => {
       const outlet = outletMap.get(entry.outlet_id);
       return [
         outlet?.im_code || '',
@@ -609,9 +612,7 @@ export default function AdminDashboard() {
         entry.category || '',
         `"${entry.main_brand || ''}"`,
         `"${entry.sub_brand || ''}"`,
-        entry.previous_stock || 0,
         entry.stock_count || 0,
-        entry.sales_qty || 0,
         entry.updated_at ? new Date(entry.updated_at).toLocaleString() : ''
       ].join(',');
     });
@@ -621,12 +622,7 @@ export default function AdminDashboard() {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    
-    // Format dates for filename
-    const startStr = new Date(reportStartDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit' }).replace(' ', '');
-    const endStr = new Date(reportEndDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit' }).replace(' ', '');
-    
-    link.setAttribute('download', `Sales_Report_${startStr}_to_${endStr}.csv`);
+    link.setAttribute('download', `Reports.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -672,6 +668,16 @@ export default function AdminDashboard() {
     setMasterData({ ...masterData, salesQty: '' });
     alert(`Master data saved for ${masterData.market} - ${masterData.category}: ${masterData.salesQty}`);
   };
+
+  const filteredReportData = useMemo(() => {
+    return reportData.filter(entry => {
+      const outlet = outletMap.get(entry.outlet_id);
+      const matchTM = reportTM === 'All' || outlet?.tm_name === reportTM;
+      const matchMarket = reportMarket === 'All' || outlet?.market === reportMarket;
+      const matchCategory = reportCategory === 'All' || entry.category === reportCategory;
+      return matchTM && matchMarket && matchCategory;
+    });
+  }, [reportData, outletMap, reportTM, reportMarket, reportCategory]);
 
   const totalPages = Math.ceil(managerFilteredEntries.length / itemsPerPage);
   const paginatedEntries = managerFilteredEntries.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -1028,8 +1034,8 @@ export default function AdminDashboard() {
                 </div>
                 <button 
                   onClick={exportReportToCSV}
-                  disabled={reportData.length === 0}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm ${reportData.length === 0 ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-green-500 hover:bg-green-600 text-white'}`}
+                  disabled={filteredReportData.length === 0}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm ${filteredReportData.length === 0 ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-green-500 hover:bg-green-600 text-white'}`}
                 >
                   <Download className="w-3.5 h-3.5" />
                   Export CSV
@@ -1056,6 +1062,39 @@ export default function AdminDashboard() {
                     className="p-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
                   />
                 </div>
+                
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">TM</label>
+                  <select
+                    value={reportTM}
+                    onChange={(e) => setReportTM(e.target.value)}
+                    className="p-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                  >
+                    {uniqueTMs.map(tm => <option key={tm} value={tm}>{tm}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Market</label>
+                  <select
+                    value={reportMarket}
+                    onChange={(e) => setReportMarket(e.target.value)}
+                    className="p-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                  >
+                    {uniqueMarkets.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Category</label>
+                  <select
+                    value={reportCategory}
+                    onChange={(e) => setReportCategory(e.target.value)}
+                    className="p-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                  >
+                    {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
               </div>
 
               {/* Summary Cards */}
@@ -1067,7 +1106,7 @@ export default function AdminDashboard() {
                   <div>
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Sales</p>
                     <h4 className="text-lg font-black text-slate-800 leading-tight">
-                      {reportData.reduce((sum, entry) => sum + (entry.sales_qty || 0), 0)}
+                      {filteredReportData.reduce((sum, entry) => sum + (entry.sales_qty || 0), 0)}
                     </h4>
                   </div>
                 </div>
@@ -1078,7 +1117,7 @@ export default function AdminDashboard() {
                   <div>
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Outlets Visited</p>
                     <h4 className="text-lg font-black text-slate-800 leading-tight">
-                      {new Set(reportData.map(entry => entry.outlet_id)).size}
+                      {new Set(filteredReportData.map(entry => entry.outlet_id)).size}
                     </h4>
                   </div>
                 </div>
@@ -1094,29 +1133,27 @@ export default function AdminDashboard() {
                         <th className="px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Category</th>
                         <th className="px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Main Brand</th>
                         <th className="px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Sub Brand</th>
-                        <th className="px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right border-b border-slate-200">Previous Stock</th>
                         <th className="px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right border-b border-slate-200">Current Stock</th>
-                        <th className="px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right border-b border-slate-200">Sales Qty</th>
                         <th className="px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right border-b border-slate-200">Updated</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {reportLoading ? (
                         <tr>
-                          <td colSpan={7} className="px-4 py-6 text-center text-slate-500 text-xs">Loading report data...</td>
+                          <td colSpan={6} className="px-4 py-6 text-center text-slate-500 text-xs">Loading report data...</td>
                         </tr>
-                      ) : reportData.length === 0 ? (
+                      ) : filteredReportData.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="px-4 py-8 text-center">
+                          <td colSpan={6} className="px-4 py-8 text-center">
                             <div className="flex flex-col items-center justify-center">
                               <FileText className="w-8 h-8 text-slate-300 mb-2" />
                               <p className="text-slate-500 font-medium text-xs">No records found for this period</p>
-                              <p className="text-[10px] text-slate-400 mt-1">Try selecting a different date range</p>
+                              <p className="text-[10px] text-slate-400 mt-1">Try selecting a different date range or filters</p>
                             </div>
                           </td>
                         </tr>
                       ) : (
-                        reportData.map((entry) => {
+                        filteredReportData.map((entry) => {
                           const outlet = outletMap.get(entry.outlet_id);
                           return (
                             <tr key={entry.id} className="hover:bg-slate-50 transition-colors">
@@ -1127,14 +1164,8 @@ export default function AdminDashboard() {
                               <td className="px-4 py-2 text-xs text-slate-600">{entry.category || '-'}</td>
                               <td className="px-4 py-2 text-xs text-slate-600 font-medium">{entry.main_brand || '-'}</td>
                               <td className="px-4 py-2 text-xs text-slate-600 font-medium">{entry.sub_brand || '-'}</td>
-                              <td className="px-4 py-2 text-xs font-bold text-slate-500 text-right">
-                                {entry.previous_stock || 0}
-                              </td>
                               <td className="px-4 py-2 text-xs font-bold text-slate-700 text-right">
                                 {entry.stock_count}
-                              </td>
-                              <td className="px-4 py-2 text-xs font-bold text-green-600 text-right">
-                                {entry.sales_qty || 0}
                               </td>
                               <td className="px-4 py-2 text-[10px] text-slate-500 text-right uppercase tracking-wider">
                                 {entry.updated_at ? new Date(entry.updated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
