@@ -110,6 +110,11 @@ export default function StockRequest() {
         .insert(requestData);
 
       if (dbError) {
+        if (dbError.message.includes('refresh_token_not_found') || dbError.message.includes('Refresh Token Not Found')) {
+          localStorage.removeItem('currentUser');
+          navigate('/');
+          return;
+        }
         console.warn("Could not save to market_stock_requests (table might not exist yet):", dbError);
         // We'll continue anyway for the prototype to show the email logic
       }

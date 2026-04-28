@@ -186,16 +186,32 @@ export default function AdminDashboard() {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const { data: outletsData } = await supabase.from('outlets').select('*');
+      const { data: outletsData, error: outletsError } = await supabase.from('outlets').select('*');
+      
+      if (outletsError) {
+        if (outletsError.message.includes('refresh_token_not_found') || outletsError.message.includes('Refresh Token Not Found')) {
+          localStorage.removeItem('currentUser');
+          navigate('/');
+          return;
+        }
+      }
+      
       if (outletsData) setOutlets(outletsData);
 
-      const { data: stockData } = await supabase.from('stock_entries').select('*').range(0, 10000);
+      const { data: stockData, error: stockError } = await supabase.from('stock_entries').select('*').range(0, 10000);
+      
+      if (stockError && (stockError.message.includes('refresh_token_not_found') || stockError.message.includes('Refresh Token Not Found'))) {
+        localStorage.removeItem('currentUser');
+        navigate('/');
+        return;
+      }
+      
       if (stockData) setStockEntries(stockData);
 
       setLoading(false);
     };
     fetchData();
-  }, []);
+  }, [navigate]);
 
   // Fetch Reports Data
   useEffect(() => {
@@ -323,6 +339,7 @@ export default function AdminDashboard() {
     link.click();
     document.body.removeChild(link);
   };
+
 
   // Presence Tracking
   useEffect(() => {
@@ -1180,6 +1197,8 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
+
 
           {activeMenu === 'Coverage' && (
             <div className="p-4 sm:p-5 max-w-7xl mx-auto flex flex-col gap-4">

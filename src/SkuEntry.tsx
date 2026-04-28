@@ -119,12 +119,18 @@ export default function SkuEntry() {
       sub_brand: product.sub_brand,
       stock_count: stockCount,
       previous_stock: previousStock,
-      sales_qty: salesQty
+      sales_qty: salesQty,
+      updated_at: new Date().toISOString()
     }, {
       onConflict: 'outlet_id,product_id'
     });
 
     if (error) {
+      if (error.message.includes('refresh_token_not_found') || error.message.includes('Refresh Token Not Found')) {
+        localStorage.removeItem('currentUser');
+        navigate('/');
+        return;
+      }
       console.error("Database Connection/Upsert Error:", error.message, error.details);
       alert("Failed to save stock for " + product.sub_brand);
     }

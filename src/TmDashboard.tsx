@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, Outlet } from './lib/supabase';
-import { Home, FileText, RefreshCw, LogOut, ChevronRight, Search, CheckCircle2, Clock, MapPin, Bell, PackagePlus, History, List, X } from 'lucide-react';
+import { Home, FileText, RefreshCw, LogOut, ChevronRight, Search, CheckCircle2, Clock, MapPin, Bell, History, List, X } from 'lucide-react';
 
 export default function TmDashboard() {
   const navigate = useNavigate();
@@ -23,79 +23,104 @@ export default function TmDashboard() {
   const [recentStockDetails, setRecentStockDetails] = useState<any[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
-  useEffect(() => {
-    const fetchOutlets = async () => {
-      const userStr = localStorage.getItem('currentUser');
-      const user = userStr ? JSON.parse(userStr) : { email: '' };
-      setUserEmail(user.email);
+  const fetchOutlets = React.useCallback(async () => {
+    const userStr = localStorage.getItem('currentUser');
+    const user = userStr ? JSON.parse(userStr) : { email: '' };
+    setUserEmail(user.email);
 
-      if (user.email) {
-        const { data, error } = await supabase
-          .from('outlets')
-          .select('*')
-          .eq('tm_email', user.email)
-          .limit(10000);
+    if (user.email) {
+      const { data, error } = await supabase
+        .from('outlets')
+        .select('*')
+        .eq('tm_email', user.email)
+        .limit(10000);
+      
+      if (error) {
+        if (error.message.includes('refresh_token_not_found') || error.message.includes('Refresh Token Not Found')) {
+          localStorage.removeItem('currentUser');
+          navigate('/');
+          return;
+        }
+        console.error("Error fetching outlets:", error);
+      }
+      
+      if (data) {
+        setOutlets(data);
         
-        if (data) {
-          setOutlets(data);
-          
-          const outletIds = data.map(o => o.id);
-          if (outletIds.length > 0) {
-            // Get today's start time
-            const startOfToday = new Date();
-            startOfToday.setHours(0, 0, 0, 0);
+        const outletIds = data.map(o => o.id);
+        if (outletIds.length > 0) {
+          // Get today's start time
+          const startOfToday = new Date();
+          startOfToday.setHours(0, 0, 0, 0);
 
-            // Fetch today's entries to calculate completed count
-            const { data: todayEntries } = await supabase
-              .from('stock_entries')
-              .select('outlet_id')
-              .in('outlet_id', outletIds)
-              .gte('updated_at', startOfToday.toISOString());
+          // Fetch today's entries to calculate completed count
+          const { data: todayEntries, error: todayError } = await supabase
+            .from('stock_entries')
+            .select('outlet_id')
+            .in('outlet_id', outletIds)
+            .gte('updated_at', startOfToday.toISOString());
 
-            if (todayEntries) {
-              const completedIds = new Set(todayEntries.map(e => e.outlet_id));
-              setCompletedOutletIds(completedIds);
-            }
+          if (todayError) console.error("Error fetching today entries:", todayError);
 
-            // Fetch recent stock entries for the list
-            const { data: stockData } = await supabase
-              .from('stock_entries')
-              .select('outlet_id, updated_at')
-              .in('outlet_id', outletIds)
-              .order('updated_at', { ascending: false })
-              .limit(50);
-
-            if (stockData) {
-              const uniqueRecentIds = Array.from(new Set(stockData.map(s => s.outlet_id))).slice(0, 5);
-              const recent = uniqueRecentIds.map(id => data.find(o => o.id === id)).filter(Boolean) as Outlet[];
-              setRecentOutlets(recent);
-            }
+          if (todayEntries) {
+            const completedIds = new Set(todayEntries.map(e => e.outlet_id));
+            setCompletedOutletIds(completedIds);
           }
-        } else if (error) {
-          console.error("Error fetching outlets:", error);
+
+          // Fetch recent stock entries for the list
+          const { data: stockData, error: stockError } = await supabase
+            .from('stock_entries')
+            .select('outlet_id, updated_at')
+            .in('outlet_id', outletIds)
+            .order('updated_at', { ascending: false })
+            .limit(500); // Increased significantly to find unique outlets among many SKU entries
+
+          if (stockError) console.error("Error fetching recent stock data:", stockError);
+
+          if (stockData) {
+            // Get unique outlet IDs by taking the first occurrence (latest due to order)
+            const uniqueRecentIds: string[] = [];
+            const seen = new Set<string>();
+            
+            for (const item of stockData) {
+              if (!seen.has(item.outlet_id)) {
+                seen.add(item.outlet_id);
+                uniqueRecentIds.push(item.outlet_id);
+                if (uniqueRecentIds.length >= 10) break;
+              }
+            }
+            
+            const recent = uniqueRecentIds.map(id => data.find(o => o.id === id)).filter(Boolean) as Outlet[];
+            setRecentOutlets(recent);
+          }
         }
       }
-      setLoading(false);
-    };
+    }
+    setLoading(false);
+  }, [navigate]);
 
+  useEffect(() => {
     fetchOutlets();
 
     // Subscribe to stock_entries for real-time updates
-    const stockChannel = supabase.channel('tm-stock-updates')
+    const stockChannel = supabase.channel('tm-stock-updates-realtime')
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
         table: 'stock_entries' 
-      }, () => {
+      }, (payload) => {
+        console.log("Real-time update received:", payload);
         // Re-fetch progress and recent outlets when entries change
         fetchOutlets();
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log("Stock channel status:", status);
+      });
 
     return () => {
       supabase.removeChannel(stockChannel);
     };
-  }, []);
+  }, [fetchOutlets]);
 
   useEffect(() => {
     if (!userEmail) return;
@@ -219,9 +244,6 @@ export default function TmDashboard() {
             <button onClick={() => setActiveTab('home')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-medium transition-colors ${activeTab === 'home' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
               <Home size={20} /> Home
             </button>
-            <button onClick={() => navigate('/stock-request')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-medium transition-colors text-slate-500 hover:bg-slate-50 hover:text-slate-900`}>
-              <PackagePlus size={20} /> Stock Request
-            </button>
             <button onClick={() => { setActiveTab('home'); setTimeout(() => document.getElementById('recent-entries-section')?.scrollIntoView({ behavior: 'smooth' }), 100); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-medium transition-colors text-slate-500 hover:bg-slate-50 hover:text-slate-900`}>
               <History size={20} /> Recent Entries
             </button>
@@ -306,6 +328,38 @@ export default function TmDashboard() {
                        </div>
                     </div>
 
+                    {/* Progress Card */}
+                    <div className="mb-6 bg-white rounded-[2rem] p-6 shadow-[0_4px_20px_rgba(43,107,237,0.08)] border border-slate-50 flex items-center justify-between overflow-hidden relative">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-[#2b6bed]/5 rounded-full -mr-16 -mt-16"></div>
+                      <div className="relative z-10">
+                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Today's Progress</h3>
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-4xl font-black text-[#1e2a52] tracking-tighter">{progressPercentage}%</span>
+                          <span className="text-xs font-bold text-slate-400">Coverage</span>
+                        </div>
+                        <p className="text-[11px] font-medium text-slate-500 mt-2">
+                          <span className="text-[#2b6bed] font-bold">{completedCount}</span> out of {outlets.length} outlets visited
+                        </p>
+                      </div>
+                      <div className="w-20 h-20 rounded-full border-[6px] border-slate-100 flex items-center justify-center relative shrink-0">
+                        <svg className="w-full h-full absolute inset-0 -rotate-90">
+                          <circle
+                            cx="40"
+                            cy="40"
+                            r="34"
+                            stroke="currentColor"
+                            strokeWidth="6"
+                            fill="transparent"
+                            className="text-[#2b6bed]"
+                            strokeDasharray={`${2 * Math.PI * 34}`}
+                            strokeDashoffset={`${2 * Math.PI * 34 * (1 - progressPercentage / 100)}`}
+                            style={{ transition: 'stroke-dashoffset 1s ease-in-out' }}
+                          />
+                        </svg>
+                        <span className="material-symbols-outlined text-[#2b6bed] text-2xl">location_on</span>
+                      </div>
+                    </div>
+
                     {/* Universal Search - Pill matching image */}
                     <div className="mb-8 relative z-20">
                       <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
@@ -345,16 +399,7 @@ export default function TmDashboard() {
                     <div className="mb-8">
                       <h3 className="text-lg font-bold text-[#1e2a52] mb-1">Actions</h3>
                       <p className="text-[11px] text-slate-400 mb-4 font-medium">For more details press on the icons.</p>
-                      <div className="flex justify-between items-start px-2">
-                        <button 
-                          onClick={() => navigate('/stock-request')}
-                          className="flex flex-col items-center gap-2 group"
-                        >
-                          <div className="w-14 h-14 rounded-full border-2 border-[#2b6bed]/20 bg-white flex items-center justify-center text-[#2b6bed] group-active:scale-95 transition-transform shadow-sm">
-                            <PackagePlus size={24} strokeWidth={2} />
-                          </div>
-                          <span className="text-[11px] font-semibold text-slate-700">Request</span>
-                        </button>
+                      <div className="flex justify-around items-start px-2">
                         
                         <button 
                           onClick={() => {
@@ -527,19 +572,12 @@ export default function TmDashboard() {
 
           {/* Fixed Bottom Navigation Bar - Floating Pill Style */}
           <div className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-[320px]">
-            <nav className="flex justify-around items-center px-2 py-3 bg-white rounded-full shadow-[0_10px_40px_rgba(43,107,237,0.15)] mx-auto">
+            <nav className="flex justify-around items-center px-6 py-3 bg-white rounded-full shadow-[0_10px_40px_rgba(43,107,237,0.15)] mx-auto">
               <button 
                 onClick={() => setActiveTab('home')}
                 className={`p-3 rounded-full transition-all duration-300 ${activeTab === 'home' ? 'text-[#2b6bed] bg-[#eef4ff] scale-110' : 'text-slate-300 hover:text-slate-500'}`}
               >
                 <Home size={22} strokeWidth={2.5} />
-              </button>
-              
-              <button 
-                onClick={() => navigate('/stock-request')}
-                className={`p-3 rounded-full transition-all duration-300 text-slate-300 hover:text-slate-500`}
-              >
-                <PackagePlus size={22} strokeWidth={2.5} />
               </button>
               
               <button 

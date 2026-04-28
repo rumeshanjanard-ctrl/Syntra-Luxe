@@ -26,11 +26,17 @@ export default function RsmDashboard() {
       setUserEmail(user.email);
 
       const { data, error } = await supabase.from('outlets').select('*');
+      if (error) {
+        if (error.message.includes('refresh_token_not_found') || error.message.includes('Refresh Token Not Found')) {
+          localStorage.removeItem('currentUser');
+          navigate('/');
+          return;
+        }
+        console.error("Error fetching outlets:", error);
+      }
       if (data) {
         setOutlets(data);
         setFilteredOutlets(data);
-      } else if (error) {
-        console.error("Error fetching outlets:", error);
       }
       setLoading(false);
     };
@@ -97,6 +103,7 @@ export default function RsmDashboard() {
 
     fetchCoverage();
   }, [activeMenu, filteredOutlets]);
+
 
   const handleLogout = async () => {
     try {
