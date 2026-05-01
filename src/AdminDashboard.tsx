@@ -31,6 +31,8 @@ import {
   Pie, 
   BarChart,
   Bar,
+  LineChart,
+  Line,
   Cell, 
   XAxis, 
   YAxis, 
@@ -42,6 +44,7 @@ import {
 import { MapContainer, TileLayer, Marker, Tooltip as LeafletTooltip } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useSupabasePresence } from './hooks/useSupabasePresence';
 
 const marketCoordinates: Record<string, [number, number]> = {
   'Anuradapura': [8.3114, 80.4037],
@@ -125,9 +128,9 @@ export default function AdminDashboard() {
   const [reportMarket, setReportMarket] = useState('All');
   const [reportCategory, setReportCategory] = useState('All');
 
-  // Presence State
-  const [onlineUsers, setOnlineUsers] = useState<Record<string, any>>({});
-  const [lastSeenUsers, setLastSeenUsers] = useState<Record<string, string>>({});
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  
+  const { onlineUsers, lastSeenUsers } = useSupabasePresence(currentUser?.email, userName, currentUser?.role || 'Admin');
 
   // Admin Control Center State
   const [markets, setMarkets] = useState<string[]>(Object.keys(marketCoordinates));
@@ -161,8 +164,6 @@ export default function AdminDashboard() {
   useEffect(() => {
     localStorage.setItem('masterDataEntries', JSON.stringify(masterDataEntries));
   }, [masterDataEntries]);
-
-  const [currentUser, setCurrentUser] = useState<any>(null);
 
   // Coverage State
   const [coverageVisits, setCoverageVisits] = useState<{outlet_id: string, updated_at: string}[]>([]);
@@ -400,65 +401,7 @@ export default function AdminDashboard() {
   };
 
 
-  // Presence Tracking
-  useEffect(() => {
-    if (!currentUser?.email) return;
 
-    const channel = supabase.channel('online-users', {
-      config: {
-        presence: {
-          key: currentUser.email.toLowerCase(),
-        },
-      },
-    });
-
-    const updatePresence = () => {
-      const newState = channel.presenceState();
-      const users: Record<string, any> = {};
-      for (const key in newState) {
-        if (newState[key] && newState[key].length > 0) {
-          const presence = newState[key][0] as any;
-          if (presence.user_email) {
-            users[presence.user_email.toLowerCase().trim()] = presence;
-          }
-        }
-      }
-      setOnlineUsers(users);
-    };
-
-    channel
-      .on('presence', { event: 'sync' }, updatePresence)
-      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-        updatePresence();
-      })
-      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-        if (leftPresences.length > 0) {
-          const presence = leftPresences[0] as any;
-          if (presence.user_email) {
-            const email = presence.user_email.toLowerCase();
-            setLastSeenUsers(prev => ({
-              ...prev,
-              [email]: new Date().toISOString()
-            }));
-          }
-        }
-        updatePresence();
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({
-            user_email: currentUser.email,
-            name: userName,
-            role: currentUser.role,
-            online_at: new Date().toISOString()
-          });
-        }
-      });
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentUser, userName]);
 
   const outletMap = useMemo(() => {
     const map = new Map<string, Outlet>();
@@ -639,14 +582,27 @@ export default function AdminDashboard() {
   const pieData = categoryChartData;
 
   const marketChartData = useMemo(() => {
-    const counts: Record<string, number> = {};
+    const data: Record<string, { total: number, visitedSet: Set<string> }> = {};
+    
     outlets.forEach(o => {
       if (o.market) {
-        counts[o.market] = (counts[o.market] || 0) + 1;
+        if (!data[o.market]) {
+          data[o.market] = { total: 0, visitedSet: new Set() };
+        }
+        data[o.market].total += 1;
       }
     });
-    return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  }, [outlets]);
+
+    filteredStockEntries.forEach(s => {
+       const o = outletMap.get(s.outlet_id);
+       if (o && o.market && data[o.market]) {
+          data[o.market].visitedSet.add(s.outlet_id);
+       }
+    });
+
+    return Object.entries(data).map(([name, val]) => ({ name, total: val.total, visited: val.visitedSet.size }))
+      .sort((a, b) => b.total - a.total);
+  }, [outlets, filteredStockEntries, outletMap]);
 
   const stockByMarketData = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -691,15 +647,21 @@ export default function AdminDashboard() {
 
     return Array.from(map.values()).map(tm => {
       const now = new Date();
-      const isOnline = tm.lastSeen && (now.getTime() - tm.lastSeen.getTime() < 60 * 60 * 1000); // 1 hour
+      const isOnline = !!onlineUsers[tm.email.toLowerCase()];
       return {
         ...tm,
         visitedCount: tm.visitedOutlets.size,
         coverage: tm.totalOutlets > 0 ? Math.round((tm.visitedOutlets.size / tm.totalOutlets) * 100) : 0,
         isOnline
       };
-    }).sort((a, b) => b.coverage - a.coverage);
-  }, [outlets, stockEntries, outletMap]);
+    }).sort((a, b) => {
+      // Sort by online status first
+      if (a.isOnline && !b.isOnline) return -1;
+      if (!a.isOnline && b.isOnline) return 1;
+      // Then alphabetically by name
+      return a.name.localeCompare(b.name);
+    });
+  }, [outlets, stockEntries, outletMap, onlineUsers]);
 
   const recentTMActivities = useMemo(() => {
     return stockEntries.slice(0, 10).map(s => {
@@ -998,110 +960,29 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* Today's Coverage Status Component - Same design as custom request */}
-                  <div className="bg-white rounded-[2rem] p-6 lg:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col lg:flex-row gap-8">
-                    {/* Left: Overall Coverage */}
-                    <div className="flex-1 flex flex-col justify-center">
-                      <div className="flex items-center gap-2 mb-4 text-indigo-600">
-                        <MapPin className="w-5 h-5" />
-                        <h2 className="text-sm font-bold uppercase tracking-widest text-slate-700">Today's Coverage Status</h2>
-                      </div>
-                      
-                      <div className="flex items-end gap-3 mb-4">
-                        <span className="text-6xl font-black text-slate-900 tracking-tighter leading-none">{todayCoveragePercentage}%</span>
-                        <span className="text-slate-500 font-medium mb-1">Overall</span>
-                      </div>
-                      
-                      <p className="text-sm text-slate-500 mb-8 font-medium">
-                        <strong className="text-indigo-600">{todayVisitedOutletsCount}</strong> visited out of <strong className="text-slate-800">{outlets.length}</strong> total outlets today.
-                      </p>
 
-                      <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden flex mb-2 relative shadow-inner">
-                        <div 
-                          className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full relative z-10 transition-all duration-1000 ease-out" 
-                          style={{ width: `${todayCoveragePercentage}%` }}
-                        >
-                          <div className="absolute inset-0 bg-white/20 w-full animate-[shimmer_2s_infinite]"></div>
-                        </div>
-                      </div>
-                      
-                      <div className="flex justify-between text-[11px] font-bold text-slate-400 uppercase">
-                        <span>0%</span>
-                        <span>Target (100%)</span>
-                      </div>
-                    </div>
-
-                    {/* Right: Visit Status by Market List */}
-                    <div className="flex-1 lg:border-l lg:border-slate-100 lg:pl-10 h-[220px]">
-                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Visit Status by Market</h3>
-                      <div className="h-[180px] overflow-y-auto custom-scrollbar pr-2 space-y-3">
-                        {marketCoverageData.map((market, idx) => (
-                          <div key={idx} className="bg-white rounded-xl p-3 border border-slate-100 hover:shadow-sm hover:border-slate-200 transition-all">
-                            <div className="flex justify-between items-center mb-2">
-                              <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-600 font-bold border border-slate-100 text-xs shadow-inner">
-                                  {market.name.substring(0, 1)}
-                                </div>
-                                <h4 className="text-[13px] font-bold text-slate-800">{market.name}</h4>
-                              </div>
-                              <span className="text-xs font-bold text-slate-400">{market.percentage}%</span>
-                            </div>
-                            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-2">
-                              <div 
-                                className={`h-full rounded-full transition-all duration-1000 ${market.percentage >= 80 ? 'bg-emerald-500' : market.percentage >= 50 ? 'bg-indigo-500' : 'bg-amber-500'}`}
-                                style={{ width: `${market.percentage}%` }}
-                              ></div>
-                            </div>
-                            <div className="flex justify-between text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                              <span>Visited: <strong className="text-slate-700">{market.Visited}</strong></span>
-                              <span>Target: <strong className="text-slate-700">{market.total}</strong></span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
 
                   {/* Charts Row */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 gap-6">
                     {/* Outlets by Market */}
                     <div className="bg-white rounded-[20px] border border-slate-100 p-6 shadow-sm">
                       <div className="flex justify-between items-start mb-6">
                         <h3 className="text-[13px] font-bold uppercase tracking-widest text-slate-800">Outlets by Market</h3>
                       </div>
-                      <div className="h-[240px]">
+                      <div className="h-[280px]">
                         <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={marketChartData} margin={{ top: 0, right: 0, bottom: 0, left: -25 }} barSize={32}>
+                          <LineChart data={marketChartData} margin={{ top: 0, right: 0, bottom: 20, left: -25 }}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
-                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} dy={10} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} dy={10} angle={-45} textAnchor="end" height={60} interval={0} />
+                            <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                            <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
                             <RechartsTooltip 
                               contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
-                              cursor={{ fill: '#f8fafc' }}
                             />
-                            <Bar dataKey="value" fill="#1e293b" radius={[6, 6, 0, 0]} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-
-                    {/* Stock by Market */}
-                    <div className="bg-white rounded-[20px] border border-slate-100 p-6 shadow-sm">
-                      <div className="flex justify-between items-start mb-6">
-                        <h3 className="text-[13px] font-bold uppercase tracking-widest text-slate-800">Stock by Market</h3>
-                      </div>
-                      <div className="h-[240px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={stockByMarketData} margin={{ top: 0, right: 0, bottom: 0, left: -25 }} barSize={32}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
-                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} dy={10} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                            <RechartsTooltip 
-                              contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
-                              cursor={{ fill: '#f8fafc' }}
-                            />
-                            <Bar dataKey="value" fill="#10b981" radius={[6, 6, 0, 0]} />
-                          </BarChart>
+                            <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                            <Line yAxisId="left" type="monotone" dataKey="total" name="Total Outlets" stroke="#6366f1" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                            <Line yAxisId="right" type="monotone" dataKey="visited" name="Visited Outlets" stroke="#10b981" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                          </LineChart>
                         </ResponsiveContainer>
                       </div>
                     </div>
@@ -1111,10 +992,10 @@ export default function AdminDashboard() {
                 {/* Right Sidebar: TM Stats & Recent Activities */}
                 <div className="w-full xl:w-[360px] shrink-0 space-y-6">
                   
-                  {/* Visit Status by TM */}
+                  {/* TM Online Status */}
                   <div className="bg-white rounded-[20px] border border-slate-100 p-6 shadow-sm">
                     <div className="flex items-center justify-between mb-6">
-                      <h3 className="text-[13px] font-bold text-slate-800 uppercase tracking-widest">Visit Status by TM</h3>
+                      <h3 className="text-[13px] font-bold text-slate-800 uppercase tracking-widest">TM Online Status</h3>
                       <button className="text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full text-xs font-bold">See All</button>
                     </div>
                     
@@ -1133,17 +1014,12 @@ export default function AdminDashboard() {
                           <div className="flex-1 min-w-0">
                             <div className="flex justify-between items-baseline mb-1">
                               <h4 className="text-sm font-bold text-slate-800 truncate pr-2 group-hover:text-indigo-600 transition-colors">{tm.name}</h4>
-                              <span className="text-xs font-bold text-slate-500 shrink-0">{tm.coverage}%</span>
+                              <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded ${tm.isOnline ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500'}`}>
+                                {tm.isOnline ? 'Online' : 'Offline'}
+                              </span>
                             </div>
-                            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                              <div 
-                                className={`h-full rounded-full transition-all duration-1000 ${tm.coverage >= 80 ? 'bg-emerald-500' : tm.coverage >= 50 ? 'bg-indigo-500' : 'bg-amber-500'}`} 
-                                style={{ width: `${tm.coverage}%` }}
-                              ></div>
-                            </div>
-                            <div className="mt-1 text-[10px] text-slate-400 flex justify-between">
-                              <span>{tm.visitedCount} / {tm.totalOutlets} outlets</span>
-                              <span>{tm.isOnline ? 'Online' : 'Offline'}</span>
+                            <div className="text-[10px] text-slate-400 truncate">
+                              {tm.email}
                             </div>
                           </div>
                         </div>
