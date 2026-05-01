@@ -127,6 +127,7 @@ export default function SkuEntry() {
 
     if (error) {
       if (error.message.includes('refresh_token_not_found') || error.message.includes('Refresh Token Not Found')) {
+        await supabase.auth.signOut().catch(() => {});
         localStorage.removeItem('currentUser');
         navigate('/');
         return;

@@ -15,6 +15,10 @@ export default function Login() {
     // Show toast on mount for demo purposes
     setShowToast(true);
     const timer = setTimeout(() => setShowToast(false), 3000);
+    
+    // Clear any stale Session to prevent Invalid Refresh Token error loops
+    supabase.auth.signOut().catch(() => {});
+    
     return () => clearTimeout(timer);
   }, []);
 
@@ -79,7 +83,12 @@ export default function Login() {
         }
       }
     } catch (err: any) {
-      setError(err.message);
+      if (err.message?.includes('refresh_token_not_found') || err.message?.includes('Refresh Token Not Found')) {
+        await supabase.auth.signOut().catch(() => {});
+        setError('Session expired. Please try to log in again.');
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }

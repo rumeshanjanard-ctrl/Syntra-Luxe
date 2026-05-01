@@ -19,7 +19,10 @@ import {
   MapPin,
   ShieldCheck,
   UserPlus,
-  CheckCircle2
+  CheckCircle2,
+  Activity,
+  User,
+  Clock
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -68,6 +71,15 @@ const redDotIcon = new L.DivIcon({
   iconAnchor: [6, 6]
 });
 
+const isToday = (dateString: string) => {
+  if (!dateString) return false;
+  const today = new Date();
+  const date = new Date(dateString);
+  return date.getDate() === today.getDate() &&
+    date.getMonth() === today.getMonth() &&
+    date.getFullYear() === today.getFullYear();
+};
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [outlets, setOutlets] = useState<Outlet[]>([]);
@@ -85,6 +97,8 @@ export default function AdminDashboard() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedMainBrand, setSelectedMainBrand] = useState('All');
   const [selectedDateRange, setSelectedDateRange] = useState('All');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   const [selectedTM, setSelectedTM] = useState('All');
 
   // Pagination State
@@ -94,7 +108,7 @@ export default function AdminDashboard() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedTM, selectedMarket, selectedChannel, selectedCategory, selectedMainBrand, selectedDateRange, tableSearchQuery]);
+  }, [selectedTM, selectedMarket, selectedChannel, selectedCategory, selectedMainBrand, selectedDateRange, customStartDate, customEndDate, tableSearchQuery]);
 
   // Reports State
   const [reportStartDate, setReportStartDate] = useState(() => {
@@ -156,6 +170,9 @@ export default function AdminDashboard() {
   const [coverageMarket, setCoverageMarket] = useState('All');
   const [coverageStatus, setCoverageStatus] = useState<'All' | 'Visited' | 'Pending'>('All');
   const [coverageSearch, setCoverageSearch] = useState('');
+  const [coverageDateRange, setCoverageDateRange] = useState('Today'); // Default to Today
+  const [coverageCustomStartDate, setCoverageCustomStartDate] = useState('');
+  const [coverageCustomEndDate, setCoverageCustomEndDate] = useState('');
 
   // Fetch user name
   useEffect(() => {
@@ -183,35 +200,56 @@ export default function AdminDashboard() {
   }, []);
 
   // Fetch data
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      const { data: outletsData, error: outletsError } = await supabase.from('outlets').select('*');
-      
-      if (outletsError) {
-        if (outletsError.message.includes('refresh_token_not_found') || outletsError.message.includes('Refresh Token Not Found')) {
-          localStorage.removeItem('currentUser');
-          navigate('/');
-          return;
-        }
-      }
-      
-      if (outletsData) setOutlets(outletsData);
-
-      const { data: stockData, error: stockError } = await supabase.from('stock_entries').select('*').range(0, 10000);
-      
-      if (stockError && (stockError.message.includes('refresh_token_not_found') || stockError.message.includes('Refresh Token Not Found'))) {
+  const fetchData = React.useCallback(async () => {
+    setLoading(true);
+    const { data: outletsData, error: outletsError } = await supabase.from('outlets').select('*');
+    
+    if (outletsError) {
+      if (outletsError.message.includes('refresh_token_not_found') || outletsError.message.includes('Refresh Token Not Found')) {
+        await supabase.auth.signOut().catch(() => {});
         localStorage.removeItem('currentUser');
         navigate('/');
         return;
       }
-      
-      if (stockData) setStockEntries(stockData);
+    }
+    
+    if (outletsData) setOutlets(outletsData);
 
-      setLoading(false);
-    };
-    fetchData();
+    const { data: stockData, error: stockError } = await supabase.from('stock_entries').select('*').range(0, 10000);
+    
+    if (stockError && (stockError.message.includes('refresh_token_not_found') || stockError.message.includes('Refresh Token Not Found'))) {
+      await supabase.auth.signOut().catch(() => {});
+      localStorage.removeItem('currentUser');
+      navigate('/');
+      return;
+    }
+    
+    if (stockData) setStockEntries(stockData);
+
+    setLoading(false);
   }, [navigate]);
+
+  useEffect(() => {
+    fetchData();
+
+    // Subscribe to stock_entries for real-time updates
+    const stockChannel = supabase.channel('admin-stock-updates-realtime')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'stock_entries' 
+      }, (payload) => {
+        console.log("Real-time update received admin:", payload);
+        fetchData();
+      })
+      .subscribe((status) => {
+        console.log("Admin stock channel status:", status);
+      });
+
+    return () => {
+      supabase.removeChannel(stockChannel);
+    };
+  }, [fetchData]);
 
   // Fetch Reports Data
   useEffect(() => {
@@ -266,11 +304,32 @@ export default function AdminDashboard() {
       targetOutlets = targetOutlets.filter(o => o.market === coverageMarket);
     }
     
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
+    const today = new Date();
+    
+    const filteredVisits = coverageVisits.filter(e => {
+        if (coverageDateRange === 'All') return true;
+        
+        const visitDate = new Date(e.updated_at);
+        const diffTime = Math.abs(today.getTime() - visitDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (coverageDateRange === 'Today') {
+            return isToday(e.updated_at);
+        } else if (coverageDateRange === 'This Week') {
+            return diffDays <= 7;
+        } else if (coverageDateRange === 'More than a week') {
+            return diffDays > 7;
+        } else if (coverageDateRange === 'Custom Date' && coverageCustomStartDate && coverageCustomEndDate) {
+            const startDate = new Date(coverageCustomStartDate);
+            startDate.setHours(0, 0, 0, 0);
+            const endDate = new Date(coverageCustomEndDate);
+            endDate.setHours(23, 59, 59, 999);
+            return visitDate >= startDate && visitDate <= endDate;
+        }
+        return true;
+    });
 
-    const todayEntries = coverageVisits.filter(e => new Date(e.updated_at) >= startOfToday);
-    const visitedTodayIds = new Set(todayEntries.map(e => e.outlet_id));
+    const visitedInRangeIds = new Set(filteredVisits.map(e => e.outlet_id));
     
     const lastVisitedMap = new Map<string, string>();
     coverageVisits.forEach(entry => {
@@ -282,8 +341,8 @@ export default function AdminDashboard() {
 
     let mapped = targetOutlets.map(o => ({ 
       ...o, 
-      isEverVisited: lastVisitedMap.has(o.id),
-      visitedToday: visitedTodayIds.has(o.id),
+      isEverVisited: visitedInRangeIds.has(o.id),
+      visitedToday: visitedInRangeIds.has(o.id),
       lastVisited: lastVisitedMap.get(o.id)
     }));
 
@@ -319,7 +378,7 @@ export default function AdminDashboard() {
       displayOutlets: needsFilter ? [] : filtered,
       needsFilter
     };
-  }, [outlets, coverageVisits, coverageMarket, coverageStatus, coverageSearch]);
+  }, [outlets, coverageVisits, coverageMarket, coverageStatus, coverageSearch, coverageDateRange, coverageCustomStartDate, coverageCustomEndDate]);
 
   const handleExportCoverage = () => {
     if (coverageDisplayData.displayOutlets.length === 0) return;
@@ -427,15 +486,6 @@ export default function AdminDashboard() {
     return ['All', ...Array.from(new Set(filteredEntries.map(s => s.main_brand).filter(Boolean))).sort()];
   }, [stockEntries, selectedCategory]);
 
-  const isToday = (dateString: string) => {
-    if (!dateString) return false;
-    const today = new Date();
-    const date = new Date(dateString);
-    return date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear();
-  };
-
   // Global search filtering for Dashboard
   const filteredStockEntries = useMemo(() => {
     return stockEntries.filter(s => {
@@ -476,6 +526,12 @@ export default function AdminDashboard() {
           matchDate = diffDays <= 7;
         } else if (selectedDateRange === 'More than a week') {
           matchDate = diffDays > 7;
+        } else if (selectedDateRange === 'Custom Date' && customStartDate && customEndDate) {
+          const startDate = new Date(customStartDate);
+          startDate.setHours(0, 0, 0, 0);
+          const endDate = new Date(customEndDate);
+          endDate.setHours(23, 59, 59, 999);
+          matchDate = updatedDate >= startDate && updatedDate <= endDate;
         }
       }
 
@@ -489,7 +545,7 @@ export default function AdminDashboard() {
 
       return matchTM && matchMarket && matchChannel && matchCategory && matchMainBrand && matchDate && matchSearch;
     });
-  }, [stockEntries, outletMap, selectedTM, selectedMarket, selectedChannel, selectedCategory, selectedMainBrand, selectedDateRange, tableSearchQuery, searchQuery]);
+  }, [stockEntries, outletMap, selectedTM, selectedMarket, selectedChannel, selectedCategory, selectedMainBrand, selectedDateRange, customStartDate, customEndDate, tableSearchQuery, searchQuery]);
 
   // KPIs
   const totalStockQty = filteredStockEntries.reduce((sum, entry) => sum + (entry.stock_count || 0), 0);
@@ -505,6 +561,46 @@ export default function AdminDashboard() {
     });
     return uniqueTMs.size;
   }, [filteredStockEntries, outletMap]);
+
+  // Today's Global Coverage Calculation
+  const todayVisitedOutletsCount = useMemo(() => {
+    const todayEntries = stockEntries.filter(s => isToday(s.updated_at));
+    const uniqueVisited = new Set(todayEntries.map(s => s.outlet_id));
+    return uniqueVisited.size;
+  }, [stockEntries]);
+
+  const todayCoveragePercentage = outlets.length > 0 ? Math.round((todayVisitedOutletsCount / outlets.length) * 100) : 0;
+
+  const marketCoverageData = useMemo(() => {
+    const todayEntries = stockEntries.filter(s => isToday(s.updated_at));
+    const visitedSet = new Set(todayEntries.map(s => s.outlet_id));
+    
+    const marketStats = new Map<string, { total: number, visited: number }>();
+    
+    outlets.forEach(o => {
+      const m = o.market || 'Unknown';
+      if (!marketStats.has(m)) {
+        marketStats.set(m, { total: 0, visited: 0 });
+      }
+      const stats = marketStats.get(m)!;
+      stats.total += 1;
+      if (visitedSet.has(o.id)) {
+        stats.visited += 1;
+      }
+    });
+
+    return Array.from(marketStats.entries())
+      .map(([name, stats]) => ({
+        name: name.length > 10 ? name.substring(0, 10) + '...' : name,
+        Visited: stats.visited,
+        Pending: stats.total - stats.visited,
+        total: stats.total,
+        percentage: Math.round((stats.visited / Math.max(stats.total, 1)) * 100)
+      }))
+      .filter(item => item.total > 0)
+      .sort((a,b) => b.Visited - a.Visited)
+      .slice(0, 6);
+  }, [stockEntries, outlets]);
 
   // Charts Data
   const trendData = useMemo(() => {
@@ -562,6 +658,61 @@ export default function AdminDashboard() {
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }, [filteredStockEntries, outletMap]);
+
+  const tmProfiles = useMemo(() => {
+    const map = new Map<string, { email: string, name: string, totalOutlets: number, visitedOutlets: Set<string>, lastSeen: Date | null }>();
+    
+    outlets.forEach(o => {
+      if (!o.tm_email) return;
+      if (!map.has(o.tm_email)) {
+        map.set(o.tm_email, { email: o.tm_email, name: o.tm_name || o.tm_email.split('@')[0], totalOutlets: 0, visitedOutlets: new Set(), lastSeen: null });
+      }
+      map.get(o.tm_email)!.totalOutlets += 1;
+    });
+
+    const todayEntries = stockEntries.filter(s => isToday(s.updated_at));
+    todayEntries.forEach(s => {
+      const o = outletMap.get(s.outlet_id);
+      if (o && o.tm_email && map.has(o.tm_email)) {
+        map.get(o.tm_email)!.visitedOutlets.add(s.outlet_id);
+      }
+    });
+
+    stockEntries.forEach(s => {
+      const o = outletMap.get(s.outlet_id);
+      if (o && o.tm_email && map.has(o.tm_email)) {
+        const d = new Date(s.updated_at);
+        const curr = map.get(o.tm_email)!.lastSeen;
+        if (!curr || d > curr) {
+          map.get(o.tm_email)!.lastSeen = d;
+        }
+      }
+    });
+
+    return Array.from(map.values()).map(tm => {
+      const now = new Date();
+      const isOnline = tm.lastSeen && (now.getTime() - tm.lastSeen.getTime() < 60 * 60 * 1000); // 1 hour
+      return {
+        ...tm,
+        visitedCount: tm.visitedOutlets.size,
+        coverage: tm.totalOutlets > 0 ? Math.round((tm.visitedOutlets.size / tm.totalOutlets) * 100) : 0,
+        isOnline
+      };
+    }).sort((a, b) => b.coverage - a.coverage);
+  }, [outlets, stockEntries, outletMap]);
+
+  const recentTMActivities = useMemo(() => {
+    return stockEntries.slice(0, 10).map(s => {
+      const o = outletMap.get(s.outlet_id);
+      return {
+        id: s.id,
+        tmName: o?.tm_name || o?.tm_email?.split('@')[0] || 'Unknown',
+        outletName: o?.outlet_name || 'Unknown',
+        date: new Date(s.updated_at),
+        type: s.stock_count > 0 ? 'Stock Entry' : 'Out of Stock check'
+      };
+    });
+  }, [stockEntries, outletMap]);
 
   const GREEN_COLORS = ['#22c55e', '#16a34a', '#15803d', '#166534', '#4ade80'];
   const COLORS = ['#2b6bed', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
@@ -806,76 +957,227 @@ export default function AdminDashboard() {
                 </button>
               </div>
 
-              {/* Top Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="text-[13px] font-medium text-slate-600">Total Outlets</h3>
-                  </div>
-                  <div className="text-2xl font-semibold text-slate-800">{outlets.length}</div>
-                </div>
+              <div className="flex flex-col xl:flex-row gap-6">
                 
-                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="text-[13px] font-medium text-slate-600">Total Markets</h3>
-                  </div>
-                  <div className="text-2xl font-semibold text-slate-800">{uniqueMarkets.filter(m => m !== 'All').length}</div>
-                </div>
+                {/* Left: Main Content Area */}
+                <div className="flex-1 min-w-0 flex flex-col gap-6">
+                  
+                  {/* Top Cards - Modern Minimalist Style */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white rounded-[20px] border border-slate-100 p-6 shadow-sm relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50 rounded-full blur-2xl -mr-10 -mt-10 transition-transform duration-500 group-hover:scale-150"></div>
+                      <div className="flex justify-between items-start mb-4 relative z-10">
+                        <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
+                          <Store className="w-5 h-5" />
+                        </div>
+                      </div>
+                      <h3 className="text-[13px] font-semibold text-slate-400 mb-1 relative z-10 uppercase tracking-widest">Total Outlets</h3>
+                      <div className="text-3xl font-black text-slate-800 tracking-tight relative z-10">{outlets.length}</div>
+                    </div>
+                    
+                    <div className="bg-white rounded-[20px] border border-slate-100 p-6 shadow-sm relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-full blur-2xl -mr-10 -mt-10 transition-transform duration-500 group-hover:scale-150"></div>
+                      <div className="flex justify-between items-start mb-4 relative z-10">
+                        <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+                          <MapPin className="w-5 h-5" />
+                        </div>
+                      </div>
+                      <h3 className="text-[13px] font-semibold text-slate-400 mb-1 relative z-10 uppercase tracking-widest">Total Markets</h3>
+                      <div className="text-3xl font-black text-slate-800 tracking-tight relative z-10">{uniqueMarkets.filter(m => m !== 'All').length}</div>
+                    </div>
 
-                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="text-[13px] font-medium text-slate-600">Available Stock</h3>
-                  </div>
-                  <div className="text-2xl font-semibold text-slate-800">{totalStockQty}</div>
-                </div>
-              </div>
-
-              {/* Charts */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                {/* Outlets by Market */}
-                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                  <div className="flex justify-between items-start mb-1">
-                    <div>
-                      <h3 className="text-[15px] font-medium text-slate-800">Outlets by Market</h3>
+                    <div className="bg-white rounded-[20px] border border-slate-100 p-6 shadow-sm relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-full blur-2xl -mr-10 -mt-10 transition-transform duration-500 group-hover:scale-150"></div>
+                      <div className="flex justify-between items-start mb-4 relative z-10">
+                        <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+                          <Package className="w-5 h-5" />
+                        </div>
+                      </div>
+                      <h3 className="text-[13px] font-semibold text-slate-400 mb-1 relative z-10 uppercase tracking-widest">Available Stock</h3>
+                      <div className="text-3xl font-black text-slate-800 tracking-tight relative z-10">{totalStockQty}</div>
                     </div>
                   </div>
-                  <div className="h-[300px] mt-6">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={marketChartData} margin={{ top: 5, right: 10, bottom: 25, left: -20 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} dy={10} angle={-45} textAnchor="end" />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                        <RechartsTooltip 
-                          contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                          cursor={{ fill: '#f8fafc' }}
-                        />
-                        <Bar dataKey="value" fill="#2b6bed" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
+
+                  {/* Today's Coverage Status Component - Same design as custom request */}
+                  <div className="bg-white rounded-[2rem] p-6 lg:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col lg:flex-row gap-8">
+                    {/* Left: Overall Coverage */}
+                    <div className="flex-1 flex flex-col justify-center">
+                      <div className="flex items-center gap-2 mb-4 text-indigo-600">
+                        <MapPin className="w-5 h-5" />
+                        <h2 className="text-sm font-bold uppercase tracking-widest text-slate-700">Today's Coverage Status</h2>
+                      </div>
+                      
+                      <div className="flex items-end gap-3 mb-4">
+                        <span className="text-6xl font-black text-slate-900 tracking-tighter leading-none">{todayCoveragePercentage}%</span>
+                        <span className="text-slate-500 font-medium mb-1">Overall</span>
+                      </div>
+                      
+                      <p className="text-sm text-slate-500 mb-8 font-medium">
+                        <strong className="text-indigo-600">{todayVisitedOutletsCount}</strong> visited out of <strong className="text-slate-800">{outlets.length}</strong> total outlets today.
+                      </p>
+
+                      <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden flex mb-2 relative shadow-inner">
+                        <div 
+                          className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full relative z-10 transition-all duration-1000 ease-out" 
+                          style={{ width: `${todayCoveragePercentage}%` }}
+                        >
+                          <div className="absolute inset-0 bg-white/20 w-full animate-[shimmer_2s_infinite]"></div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex justify-between text-[11px] font-bold text-slate-400 uppercase">
+                        <span>0%</span>
+                        <span>Target (100%)</span>
+                      </div>
+                    </div>
+
+                    {/* Right: Visit Status by Market List */}
+                    <div className="flex-1 lg:border-l lg:border-slate-100 lg:pl-10 h-[220px]">
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Visit Status by Market</h3>
+                      <div className="h-[180px] overflow-y-auto custom-scrollbar pr-2 space-y-3">
+                        {marketCoverageData.map((market, idx) => (
+                          <div key={idx} className="bg-white rounded-xl p-3 border border-slate-100 hover:shadow-sm hover:border-slate-200 transition-all">
+                            <div className="flex justify-between items-center mb-2">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-600 font-bold border border-slate-100 text-xs shadow-inner">
+                                  {market.name.substring(0, 1)}
+                                </div>
+                                <h4 className="text-[13px] font-bold text-slate-800">{market.name}</h4>
+                              </div>
+                              <span className="text-xs font-bold text-slate-400">{market.percentage}%</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-2">
+                              <div 
+                                className={`h-full rounded-full transition-all duration-1000 ${market.percentage >= 80 ? 'bg-emerald-500' : market.percentage >= 50 ? 'bg-indigo-500' : 'bg-amber-500'}`}
+                                style={{ width: `${market.percentage}%` }}
+                              ></div>
+                            </div>
+                            <div className="flex justify-between text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                              <span>Visited: <strong className="text-slate-700">{market.Visited}</strong></span>
+                              <span>Target: <strong className="text-slate-700">{market.total}</strong></span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Charts Row */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Outlets by Market */}
+                    <div className="bg-white rounded-[20px] border border-slate-100 p-6 shadow-sm">
+                      <div className="flex justify-between items-start mb-6">
+                        <h3 className="text-[13px] font-bold uppercase tracking-widest text-slate-800">Outlets by Market</h3>
+                      </div>
+                      <div className="h-[240px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={marketChartData} margin={{ top: 0, right: 0, bottom: 0, left: -25 }} barSize={32}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} dy={10} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                            <RechartsTooltip 
+                              contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                              cursor={{ fill: '#f8fafc' }}
+                            />
+                            <Bar dataKey="value" fill="#1e293b" radius={[6, 6, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    {/* Stock by Market */}
+                    <div className="bg-white rounded-[20px] border border-slate-100 p-6 shadow-sm">
+                      <div className="flex justify-between items-start mb-6">
+                        <h3 className="text-[13px] font-bold uppercase tracking-widest text-slate-800">Stock by Market</h3>
+                      </div>
+                      <div className="h-[240px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={stockByMarketData} margin={{ top: 0, right: 0, bottom: 0, left: -25 }} barSize={32}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} dy={10} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                            <RechartsTooltip 
+                              contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                              cursor={{ fill: '#f8fafc' }}
+                            />
+                            <Bar dataKey="value" fill="#10b981" radius={[6, 6, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Stock by Market */}
-                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                  <div className="flex justify-between items-start mb-1">
-                    <div>
-                      <h3 className="text-[15px] font-medium text-slate-800">Stock by Market</h3>
+                {/* Right Sidebar: TM Stats & Recent Activities */}
+                <div className="w-full xl:w-[360px] shrink-0 space-y-6">
+                  
+                  {/* Visit Status by TM */}
+                  <div className="bg-white rounded-[20px] border border-slate-100 p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-[13px] font-bold text-slate-800 uppercase tracking-widest">Visit Status by TM</h3>
+                      <button className="text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full text-xs font-bold">See All</button>
+                    </div>
+                    
+                    <div className="space-y-5 h-[340px] overflow-y-auto custom-scrollbar pr-2">
+                      {tmProfiles.length === 0 ? (
+                        <div className="text-center text-slate-400 text-sm py-4">No TM profiles found</div>
+                      ) : tmProfiles.map((tm, idx) => (
+                        <div key={idx} className="flex items-center gap-4 group">
+                          <div className="relative">
+                            <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-700 overflow-hidden">
+                              {tm.name.substring(0, 2).toUpperCase()}
+                            </div>
+                            <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${tm.isOnline ? 'bg-green-500' : 'bg-slate-300'}`}></div>
+                          </div>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-baseline mb-1">
+                              <h4 className="text-sm font-bold text-slate-800 truncate pr-2 group-hover:text-indigo-600 transition-colors">{tm.name}</h4>
+                              <span className="text-xs font-bold text-slate-500 shrink-0">{tm.coverage}%</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full transition-all duration-1000 ${tm.coverage >= 80 ? 'bg-emerald-500' : tm.coverage >= 50 ? 'bg-indigo-500' : 'bg-amber-500'}`} 
+                                style={{ width: `${tm.coverage}%` }}
+                              ></div>
+                            </div>
+                            <div className="mt-1 text-[10px] text-slate-400 flex justify-between">
+                              <span>{tm.visitedCount} / {tm.totalOutlets} outlets</span>
+                              <span>{tm.isOnline ? 'Online' : 'Offline'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  <div className="h-[300px] mt-6">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={stockByMarketData} margin={{ top: 5, right: 10, bottom: 25, left: -20 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} dy={10} angle={-45} textAnchor="end" />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                        <RechartsTooltip 
-                          contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                          cursor={{ fill: '#f8fafc' }}
-                        />
-                        <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
+
+                  {/* Recent Activity TMs */}
+                  <div className="bg-white rounded-[20px] border border-slate-100 p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-[13px] font-bold text-slate-800 uppercase tracking-widest">Recent Activity</h3>
+                    </div>
+                    
+                    <div className="space-y-6 relative before:absolute before:inset-0 before:ml-[11px] before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent pr-2 h-[340px] overflow-y-auto custom-scrollbar">
+                      {recentTMActivities.length === 0 ? (
+                        <div className="text-center text-slate-400 text-sm py-4 relative z-10 bg-white">No recent activities</div>
+                      ) : recentTMActivities.map((activity, idx) => (
+                        <div key={idx} className="relative flex items-start gap-4">
+                          <div className="absolute left-0 w-6 h-6 rounded-full bg-indigo-100 border-4 border-white flex items-center justify-center shrink-0 z-10 mt-0.5">
+                            <Clock className="w-3 h-3 text-indigo-600" />
+                          </div>
+                          <div className="pl-10 pb-2">
+                            <p className="text-xs text-slate-800 leading-snug">
+                              <span className="font-bold">{activity.tmName}</span> {activity.type === 'Stock Entry' ? 'updated stock at' : 'reported issue at'} <span className="font-bold text-indigo-600">{activity.outletName}</span>
+                            </p>
+                            <p className="text-[10px] text-slate-400 mt-1 uppercase font-semibold tracking-wider">
+                              {activity.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                  
                 </div>
               </div>
             </div>
@@ -947,9 +1249,21 @@ export default function AdminDashboard() {
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Last Updated</label>
                   <select value={selectedDateRange} onChange={e => setSelectedDateRange(e.target.value)} className="w-full p-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white">
-                    {['All', 'Today', 'This Week', 'More than a week'].map(d => <option key={d} value={d}>{d}</option>)}
+                    {['All', 'Today', 'This Week', 'More than a week', 'Custom Date'].map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
+                {selectedDateRange === 'Custom Date' && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Start Date</label>
+                      <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="w-full p-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">End Date</label>
+                      <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="w-full p-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Table */}
@@ -1233,6 +1547,36 @@ export default function AdminDashboard() {
                   >
                     {uniqueMarkets.map(m => <option key={m} value={m}>{m === 'All' ? 'Select Market' : m}</option>)}
                   </select>
+
+                  <select 
+                    value={coverageDateRange} 
+                    onChange={e => setCoverageDateRange(e.target.value)} 
+                    className="p-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white min-w-[140px]"
+                  >
+                    <option value="All">All Time</option>
+                    <option value="Today">Today</option>
+                    <option value="This Week">This Week</option>
+                    <option value="More than a week">More than a week</option>
+                    <option value="Custom Date">Custom Date</option>
+                  </select>
+
+                  {coverageDateRange === 'Custom Date' && (
+                    <>
+                      <input 
+                        type="date"
+                        value={coverageCustomStartDate}
+                        onChange={e => setCoverageCustomStartDate(e.target.value)}
+                        className="p-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                      />
+                      <span className="text-xs text-slate-500">-</span>
+                      <input 
+                        type="date"
+                        value={coverageCustomEndDate}
+                        onChange={e => setCoverageCustomEndDate(e.target.value)}
+                        className="p-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                      />
+                    </>
+                  )}
 
                   <button 
                     onClick={handleExportCoverage}

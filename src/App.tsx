@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { supabase } from './lib/supabase';
 import Login from './Login';
 import TmDashboard from './TmDashboard';
 import SkuEntry from './SkuEntry';
@@ -39,6 +40,32 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode,
 }
 
 export default function App() {
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT') {
+        localStorage.removeItem('currentUser');
+      }
+    });
+
+    // Handle initial global background token errors here 
+    // to prevent the unhandled promise rejection loops
+    const checkSession = async () => {
+      const { error } = await supabase.auth.getSession();
+      if (error && (error.message.includes('refresh_token_not_found') || error.message.includes('Refresh Token Not Found'))) {
+        await supabase.auth.signOut().catch(() => {});
+        localStorage.removeItem('currentUser');
+        if (window.location.pathname !== '/') {
+           window.location.href = '/';
+        }
+      }
+    }
+    checkSession();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>

@@ -28,6 +28,7 @@ export default function RsmDashboard() {
       const { data, error } = await supabase.from('outlets').select('*');
       if (error) {
         if (error.message.includes('refresh_token_not_found') || error.message.includes('Refresh Token Not Found')) {
+          await supabase.auth.signOut().catch(() => {});
           localStorage.removeItem('currentUser');
           navigate('/');
           return;
