@@ -18,6 +18,7 @@ export default function TmDashboard() {
   const [compName, setCompName] = useState('');
   const [compSku, setCompSku] = useState('');
   const [compImage, setCompImage] = useState<string | null>(null);
+  const [isSubmittingComp, setIsSubmittingComp] = useState(false);
 
   const handleCompImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -27,6 +28,59 @@ export default function TmDashboard() {
         setCompImage(reader.result as string);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCompSubmit = async () => {
+    if (!compName || (!compSku && !compImage)) return;
+    
+    setIsSubmittingComp(true);
+    try {
+      let imageUrl = null;
+      
+      if (compImage && compImage.startsWith('data:image')) {
+        const base64Data = compImage.split(',')[1];
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'image/jpeg' });
+        
+        const fileName = `comp_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('competitor_images')
+          .upload(fileName, blob, { contentType: 'image/jpeg' });
+          
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from('competitor_images').getPublicUrl(fileName);
+          imageUrl = urlData.publicUrl;
+        } else {
+          console.warn('Image upload failed, ensure bucket exists', uploadError);
+        }
+      }
+      
+      const { error } = await supabase.from('competitor_tracks').insert({
+        tm_email: userEmail,
+        competitor_name: compName,
+        sku_product: compSku,
+        image_url: imageUrl,
+        image_base64: imageUrl ? null : compImage // Fallback if no bucket
+      });
+      
+      if (error) throw error;
+      
+      alert("Competitor entry saved successfully!");
+      setShowCompetitorForm(false);
+      setCompName('');
+      setCompSku('');
+      setCompImage(null);
+    } catch (error: any) {
+      console.error("Error saving competitor data", error);
+      alert("Failed to save: " + error.message);
+    } finally {
+      setIsSubmittingComp(false);
     }
   };
 
@@ -225,9 +279,6 @@ export default function TmDashboard() {
             <button onClick={() => setActiveTab('home')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-medium transition-colors ${activeTab === 'home' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
               <Home size={20} /> Home
             </button>
-            <button onClick={() => { setActiveTab('home'); setTimeout(() => document.getElementById('recent-entries-section')?.scrollIntoView({ behavior: 'smooth' }), 100); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-medium transition-colors text-slate-500 hover:bg-slate-50 hover:text-slate-900`}>
-              <History size={20} /> Recent Entries
-            </button>
             <button onClick={() => setActiveTab('entries')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-medium transition-colors ${activeTab === 'entries' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
               <List size={20} /> Outlet List
             </button>
@@ -293,7 +344,7 @@ export default function TmDashboard() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2.5">
-                         <button className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-slate-800 shadow-[0_2px_10px_rgb(0,0,0,0.03)]"><Calendar size={16} strokeWidth={2.5}/></button>
+                         <button onClick={handleLogout} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-800 shadow-[0_2px_10px_rgb(0,0,0,0.03)] transition-colors hover:bg-slate-200"><LogOut size={16} strokeWidth={2.5}/></button>
                          <button className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-slate-800 shadow-[0_2px_10px_rgb(0,0,0,0.03)] relative"><Bell size={16} strokeWidth={2.5}/><span className="absolute top-2.5 right-2 w-2 h-2 bg-green-400 border-2 border-white rounded-full"></span></button>
                       </div>
                     </header>
@@ -568,17 +619,11 @@ export default function TmDashboard() {
                             </div>
 
                             <button
-                              onClick={() => {
-                                alert("Competitor entry saved successfully!");
-                                setShowCompetitorForm(false);
-                                setCompName('');
-                                setCompSku('');
-                                setCompImage(null);
-                              }}
-                              disabled={!compName || (!compSku && !compImage)}
+                              onClick={handleCompSubmit}
+                              disabled={!compName || (!compSku && !compImage) || isSubmittingComp}
                               className="w-full mt-2 bg-[#1e2a52] text-white py-3.5 rounded-xl font-bold text-sm shadow-[0_8px_20px_rgba(30,42,82,0.2)] active:scale-[0.98] transition-transform disabled:opacity-50 disabled:active:scale-100"
                             >
-                              Submit Entry
+                              {isSubmittingComp ? 'Submitting...' : 'Submit Entry'}
                             </button>
                          </div>
                       </div>
@@ -599,7 +644,7 @@ export default function TmDashboard() {
 
           {/* Fixed Bottom Navigation Bar - Reference Style */}
           <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md pb-6 pt-3 px-6 rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.06)] border border-slate-50">
-            <nav className="flex justify-between items-center relative">
+            <nav className="flex justify-between items-center relative max-w-sm mx-auto">
               <button 
                 onClick={() => setActiveTab('home')}
                 className={`flex flex-col items-center gap-1.5 min-w-[56px] transition-colors relative ${activeTab === 'home' ? 'text-slate-800' : 'text-slate-400'}`}
@@ -614,20 +659,10 @@ export default function TmDashboard() {
                 className={`flex flex-col items-center gap-1.5 min-w-[56px] transition-colors relative ${activeTab === 'entries' ? 'text-slate-800' : 'text-slate-400'}`}
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={activeTab === 'entries' ? 2.5 : 2} strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
-                <span className="text-[10px] font-semibold">Progress</span>
+                <span className="text-[10px] font-semibold">Outlet List</span>
                 {activeTab === 'entries' && <div className="absolute bottom-[-16px] w-[20px] h-[3px] bg-slate-800 rounded-t-lg"></div>}
               </button>
               
-              <button 
-                 onClick={() => {
-                   document.getElementById('recent-entries-section')?.scrollIntoView({ behavior: 'smooth' });
-                   setActiveTab('home');
-                 }}
-                 className="flex justify-center items-center w-14 h-14 bg-[#cbf08b] rounded-full shadow-[0_8px_20px_rgba(135,215,37,0.3)] text-[#4d7c0f] transform -translate-y-5 relative border-4 border-white shrink-0 active:scale-95 transition-transform"
-              >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7V4h3"/><path d="M20 7V4h-3"/><path d="M4 17v3h3"/><path d="M20 17v3h-3"/><rect x="9" y="9" width="6" height="6"/></svg>
-              </button>
-
               <button 
                 onClick={() => setActiveTab('competitor')}
                 className={`flex flex-col items-center gap-1.5 min-w-[56px] transition-colors relative ${activeTab === 'competitor' ? 'text-slate-800' : 'text-slate-400'}`}
@@ -635,14 +670,6 @@ export default function TmDashboard() {
                 <Target size={22} strokeWidth={activeTab === 'competitor' ? 2.5 : 2} />
                 <span className="text-[10px] font-semibold">Competitor</span>
                 {activeTab === 'competitor' && <div className="absolute bottom-[-16px] w-[20px] h-[3px] bg-slate-800 rounded-t-lg"></div>}
-              </button>
-
-              <button 
-                onClick={handleLogout}
-                className={`flex flex-col items-center gap-1.5 min-w-[56px] text-slate-400`}
-              >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                <span className="text-[10px] font-semibold">Menu</span>
               </button>
             </nav>
           </div>
